@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WooCommerce 直播助手</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <nav class="tab-buttons">
+        <button class="tab-button active" data-tab="settings">商店設定</button>
+        <button class="tab-button" data-tab="products">商品設置</button>
+    </nav>
+
+    <main class="tab-content">
+        
+        <div class="tab-pane active" id="settings">
+            <h3>商店設定</h3>
+            <div>
+                <label for="storeUrl">商店網址</label>
+                <input type="text" id="storeUrl" placeholder="https://mystore.com">
+            </div>
+            <div>
+                <label for="consumerKey">金鑰</label>
+                <input type="text" id="consumerKey" placeholder="ck_...">
+            </div>
+            <div>
+                <label for="consumerSecret">密鑰</label>
+                <input type="password" id="consumerSecret" placeholder="cs_...">
+            </div>
+            <div class="submit-area">
+                <button class="submit-button" id="saveButton">儲存設定</button>
+                <button class="submit-button" id="testButton">測試連線</button>
+            </div>
+            <hr>
+            <div id="status"></div>
+        </div>
+
+        <div class="tab-pane" id="products">
+            <h3>商品管理</h3>
+            <p>這裡是未來用來搜尋商品、即時上架的地方。</p>
+            </div>
+
+    </main>
+
+    <script src="side_panel.js"></script>
+</body>
+</html>

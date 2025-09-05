@@ -1,0 +1,62 @@
+/* 基本樣式 */
+body {
+    width: 300px;
+    font-family: sans-serif;
+    padding: 10px;
+    margin: 0;
+}
+
+/* 分頁按鈕容器樣式 */
+.tab-buttons {
+    display: flex;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 10px;
+}
+
+/* 分頁按鈕樣式 */
+.tab-button {
+    border-radius: 5px 5px 0px 0px;
+    padding: 10px 15px;
+    cursor: pointer;
+    border: none;
+    background-color: #f1f1f1;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: -1px; /* 讓 active 的 border 蓋過容器的 border */
+}
+
+/* 被選中的分頁按鈕樣式 */
+.tab-button.active {
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-bottom: 1px solid #fff; /* 白色 border 創造融合效果 */
+}
+
+/* 分頁內容區塊的預設樣式 */
+.tab-pane {
+    display: block; /* 預設顯示 */
+}
+
+/* 【最重要的部分】隱藏不是 active 的分頁內容 */
+.tab-pane:not(.active) {
+    display: none;
+}
+
+.submit-area {
+    display: flex;
+}
+
+.submit-button {
+    margin: 5px 10px;
+    border-radius: 5px;
+    width: 200px;
+    background-color: rgb(62, 115, 215);
+    color: white;
+}
+
+/* 表單元件的基本樣式 */
+div { margin-bottom: 10px; }
+label { display: block; margin-bottom: 5px; font-size: 14px; }
+input { width: 95%; padding: 5px; }
+button { width: 100%; padding: 8px; cursor: pointer; }
+hr { margin: 15px 0; }
+h3 { margin-top: 0; }

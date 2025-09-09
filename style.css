@@ -53,6 +53,41 @@ body {
     color: white;
 }
 
+.hidden {
+    display: none !important; /* 使用 !important 確保覆蓋其他樣式 */
+}
+
+/* 直播中控制按鈕的容器樣式 */
+.live-controls-area {
+    display: flex;
+    gap: 10px; /* 讓按鈕之間有點間距 */
+    margin-top: 10px;
+}
+
+/* 控制按鈕的通用樣式 */
+.control-button {
+    flex: 1; /* 讓兩個按鈕平分寬度 */
+    border-radius: 5px;
+    color: white;
+    border: none;
+}
+
+/* 暫停按鈕的顏色 */
+.control-button.pause {
+    background-color: #ffc107; /* 黃色 */
+}
+.control-button.pause:hover {
+    background-color: #e0a800;
+}
+
+/* 結束按鈕的顏色 */
+.control-button.end {
+    background-color: #dc3545; /* 紅色 */
+}
+.control-button.end:hover {
+    background-color: #c82333;
+}
+
 /* 表單元件的基本樣式 */
 div { margin-bottom: 10px; }
 label { display: block; margin-bottom: 5px; font-size: 14px; }

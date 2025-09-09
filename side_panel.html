@@ -8,13 +8,33 @@
 <body>
 
     <nav class="tab-buttons">
-        <button class="tab-button active" data-tab="settings">商店設定</button>
+        <button class="tab-button active" data-tab="live">直播管理</button>
+        <button class="tab-button" data-tab="settings">商店設定</button>
         <button class="tab-button" data-tab="products">商品設置</button>
     </nav>
 
     <main class="tab-content">
+
+        <div class="tab-pane active" id="live">
+            <h3>直播標題</h3>
+            <div class="live-title-area">
+                <input type="text" id="liveTitle" placeholder="正在生成標題...">
+                <button class="submit-button" id="startLiveButton">開始直播</button>
+            </div>
+            
+            <div id="liveControls" class="live-controls-area hidden">
+                <button class="control-button pause" id="pauseResumeButton">暫停直播</button>
+                <button class="control-button end" id="endLiveButton">結束直播</button>
+            </div>
+
+            <div id="liveStatus"></div>
+            <hr>
+            <h3>商品上架</h3>
+            <p>（未來功能）</p>
+            <div id="live-product-list"></div>
+        </div>
         
-        <div class="tab-pane active" id="settings">
+        <div class="tab-pane" id="settings">
             <h3>商店設定</h3>
             <div>
                 <label for="storeUrl">商店網址</label>
@@ -37,9 +57,26 @@
         </div>
 
         <div class="tab-pane" id="products">
-            <h3>商品管理</h3>
-            <p>這裡是未來用來搜尋商品、即時上架的地方。</p>
+            <h3>預設分類設定</h3>
+            <p>請先在「商店設定」分頁中測試連線，成功後這裡會自動載入您的商品分類。</p>
+            <div>
+                <label for="categorySelector">選擇一個預設分類</label>
+                <select id="categorySelector" disabled>
+                    <option value="">請先載入分類...</option>
+                </select>
             </div>
+            <div class="current-setting">
+                <span>目前預設分類：</span>
+                <strong id="currentCategoryDisplay">尚未設定</strong>
+            </div>
+            <div class="submit-area">
+                 <button class="submit-button" id="saveCategoryButton">儲存預設分類</button>
+            </div>
+            <div id="categoryStatus"></div>
+            <hr>
+            <h3>即時商品上架</h3>
+            <p>（未來功能）</p>
+        </div>
 
     </main>
 

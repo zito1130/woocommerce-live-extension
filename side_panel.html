@@ -16,22 +16,57 @@
     <main class="tab-content">
 
         <div class="tab-pane active" id="live">
-            <h3>直播標題</h3>
-            <div class="live-title-area">
-                <input type="text" id="liveTitle" placeholder="正在生成標題...">
-                <button class="submit-button" id="startLiveButton">開始直播</button>
-            </div>
-            
-            <div id="liveControls" class="live-controls-area hidden">
-                <button class="control-button pause" id="pauseResumeButton">暫停直播</button>
-                <button class="control-button end" id="endLiveButton">結束直播</button>
-            </div>
+            <div class="live-layout-container">
 
-            <div id="liveStatus"></div>
-            <hr>
-            <h3>商品上架</h3>
-            <p>（未來功能）</p>
-            <div id="live-product-list"></div>
+                <div class="live-controls-column">
+                    <div class="current-setting">
+                        <span>監控主播：</span>
+                        <strong id="currentTiktokUserDisplay">尚未設定</strong>
+                    </div>
+                    <hr>
+                    <h3>直播標題</h3>
+                    <div class="live-title-area">
+                        <input type="text" id="liveTitle" placeholder="正在生成標題...">
+                        <button class="submit-button" id="startLiveButton">開始直播</button>
+                    </div>
+                    <div id="liveControls" class="live-controls-area hidden">
+                        <button class="control-button pause" id="pauseResumeButton">暫停直播</button>
+                        <button class="control-button end" id="endLiveButton">結束直播</button>
+                    </div>
+                    <div id="liveStatus" class="live-status-area"></div>
+                    <hr>
+                    <div class="products-on-market">
+                        <h3>商品上架</h3>
+                        <div class="products-info-area">
+                            <input type="text" id="productName" placeholder="商品名稱...">
+                            <div class="qty-price">
+                                <input type="text" id="productQty" placeholder="數量...">
+                                <input type="text" id="productPrice" placeholder="價格...">
+                            </div>
+                            <input type="text" id="productCall" placeholder="Call號...">
+                            <select id="shippingClassSelector">
+                                <option value="">-- 運送類別 --</option>
+                            </select>
+                        </div>
+                        <button class="submit-button" id="onMarketButton">上架</button>
+                        <div id="marketStatus" class="market-status-area"></div>
+                    </div>
+                    <hr>
+                    <div class="product-list-area">
+                        <h3>商品列表</h3>
+                        <div id="productsList">
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="live-comments-column">
+                    <h3>即時留言</h3>
+                    <div id="comment-list">
+                        </div>
+                </div>
+
+            </div>
         </div>
         
         <div class="tab-pane" id="settings">
@@ -48,14 +83,23 @@
                 <label for="consumerSecret">密鑰</label>
                 <input type="password" id="consumerSecret" placeholder="cs_...">
             </div>
+            <hr>
+            <h3>直播設定</h3>
+            <div>
+                <label for="eulerstreamKey">Eulerstream API Key</label>
+                <input type="password" id="eulerstreamKey" placeholder="請貼上您的 Eulerstream 金鑰">
+            </div>
+            <div>
+                <label for="tiktokUsername">TikTok 主播帳號 (@username)</label>
+                <input type="text" id="tiktokUsername" placeholder="@nasa">
+            </div>
             <div class="submit-area">
-                <button class="submit-button" id="saveButton">儲存設定</button>
-                <button class="submit-button" id="testButton">測試連線</button>
+                <button class="submit-button" id="saveButton">儲存所有設定</button>
+                <button class="submit-button" id="testButton">測試商店連線</button>
             </div>
             <hr>
             <div id="status"></div>
         </div>
-
         <div class="tab-pane" id="products">
             <h3>預設分類設定</h3>
             <p>請先在「商店設定」分頁中測試連線，成功後這裡會自動載入您的商品分類。</p>
@@ -74,8 +118,6 @@
             </div>
             <div id="categoryStatus"></div>
             <hr>
-            <h3>即時商品上架</h3>
-            <p>（未來功能）</p>
         </div>
 
     </main>

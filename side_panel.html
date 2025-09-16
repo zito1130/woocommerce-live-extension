@@ -14,10 +14,8 @@
     </nav>
 
     <main class="tab-content">
-
         <div class="tab-pane active" id="live">
             <div class="live-layout-container">
-
                 <div class="live-controls-column">
                     <div class="current-setting">
                         <span>監控主播：</span>
@@ -53,74 +51,64 @@
                     </div>
                     <hr>
                     <div class="product-list-area">
-                        <h3>商品列表</h3>
-                        <div id="productsList">
-
+                        <div class="list-header">
+                            <h3>商品列表</h3>
+                            <div class="batch-actions">
+                                <button id="unpublishAllBtn" class="batch-button">全數下架</button>
+                                <button id="publishAllBtn" class="batch-button">全數上架</button>
+                                <button id="clearCallNumbersBtn" class="batch-button">清空叫號</button>
+                            </div>
                         </div>
+                        <div id="productsList">
+                            </div>
                     </div>
                 </div>
-
                 <div class="live-comments-column">
                     <h3>即時留言</h3>
-                    <div id="comment-list">
-                        </div>
+                    <div id="comment-list"></div>
                 </div>
-
             </div>
         </div>
         
         <div class="tab-pane" id="settings">
             <h3>商店設定</h3>
-            <div>
-                <label for="storeUrl">商店網址</label>
-                <input type="text" id="storeUrl" placeholder="https://mystore.com">
-            </div>
-            <div>
-                <label for="consumerKey">金鑰</label>
-                <input type="text" id="consumerKey" placeholder="ck_...">
-            </div>
-            <div>
-                <label for="consumerSecret">密鑰</label>
-                <input type="password" id="consumerSecret" placeholder="cs_...">
-            </div>
+            <div><label for="storeUrl">商店網址</label><input type="text" id="storeUrl" placeholder="https://mystore.com"></div>
+            <div><label for="consumerKey">金鑰</label><input type="text" id="consumerKey" placeholder="ck_..."></div>
+            <div><label for="consumerSecret">密鑰</label><input type="password" id="consumerSecret" placeholder="cs_..."></div>
             <hr>
             <h3>直播設定</h3>
-            <div>
-                <label for="eulerstreamKey">Eulerstream API Key</label>
-                <input type="password" id="eulerstreamKey" placeholder="請貼上您的 Eulerstream 金鑰">
-            </div>
-            <div>
-                <label for="tiktokUsername">TikTok 主播帳號 (@username)</label>
-                <input type="text" id="tiktokUsername" placeholder="@nasa">
-            </div>
-            <div class="submit-area">
-                <button class="submit-button" id="saveButton">儲存所有設定</button>
-                <button class="submit-button" id="testButton">測試商店連線</button>
-            </div>
+            <div><label for="eulerstreamKey">Eulerstream API Key</label><input type="password" id="eulerstreamKey" placeholder="請貼上您的 Eulerstream 金鑰"></div>
+            <div><label for="tiktokUsername">TikTok 主播帳號 (@username)</label><input type="text" id="tiktokUsername" placeholder="@nasa"></div>
+            <div class="submit-area"><button class="submit-button" id="saveButton">儲存所有設定</button><button class="submit-button" id="testButton">測試商店連線</button></div>
             <hr>
             <div id="status"></div>
         </div>
         <div class="tab-pane" id="products">
             <h3>預設分類設定</h3>
             <p>請先在「商店設定」分頁中測試連線，成功後這裡會自動載入您的商品分類。</p>
-            <div>
-                <label for="categorySelector">選擇一個預設分類</label>
-                <select id="categorySelector" disabled>
-                    <option value="">請先載入分類...</option>
-                </select>
-            </div>
-            <div class="current-setting">
-                <span>目前預設分類：</span>
-                <strong id="currentCategoryDisplay">尚未設定</strong>
-            </div>
-            <div class="submit-area">
-                 <button class="submit-button" id="saveCategoryButton">儲存預設分類</button>
-            </div>
+            <div><label for="categorySelector">選擇一個預設分類</label><select id="categorySelector" disabled><option value="">請先載入分類...</option></select></div>
+            <div class="current-setting"><span>目前預設分類：</span><strong id="currentCategoryDisplay">尚未設定</strong></div>
+            <div class="submit-area"><button class="submit-button" id="saveCategoryButton">儲存預設分類</button></div>
             <div id="categoryStatus"></div>
             <hr>
         </div>
-
     </main>
+
+    <div id="editProductModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 id="modalProductName">編輯商品</h3>
+            <div class="modal-form">
+                <div><label>數量</label><input type="number" id="modalProductQty"></div>
+                <div><label>價格</label><input type="text" id="modalProductPrice"></div>
+                <div><label>Call號</label><input type="text" id="modalProductCall"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="modalCancelButton" class="control-button pause">取消</button>
+                <button id="modalUpdateButton" class="control-button end">確認更新</button>
+            </div>
+            <div id="modalStatus" class="market-status-area"></div>
+        </div>
+    </div>
 
     <script src="side_panel.js"></script>
 </body>

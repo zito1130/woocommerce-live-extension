@@ -9,10 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalUpdateButton = document.getElementById('modalUpdateButton');
     const modalCancelButton = document.getElementById('modalCancelButton');
     const modalStatus = document.getElementById('modalStatus');
+    const modalUpdateTimeButton = document.getElementById('modalUpdateTimeButton');
     const publishAllBtn = document.getElementById('publishAllBtn');
     const unpublishAllBtn = document.getElementById('unpublishAllBtn');
     const clearCallNumbersBtn = document.getElementById('clearCallNumbersBtn');
     const commentListDiv = document.getElementById('comment-list');
+    const orderLogListDiv = document.getElementById('order-log-list');
     const liveTitleInput = document.getElementById('liveTitle');
     const startLiveButton = document.getElementById('startLiveButton');
     const liveStatus = document.getElementById('liveStatus');
@@ -49,14 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let websocket = null;
     let categoriesCache = null;
     let lastFetchTimestamp = 0;
+    const MAX_COMMENTS_IN_LIST = 500;
 
     // --- 3. 核心函式 ---
     async function triggerAddToCart(customerInfo, productInfo, quantity) {
         if (productInfo.stock_quantity < quantity) {
-            updateMarketStatus(`⚠️ ${customerInfo.nickname} 下單失敗，庫存不足！`, 'error');
+            showToast(`⚠️ ${customerInfo.nickname} 下單失敗，庫存不足！`, 'error');
             return;
         }
-        updateMarketStatus(`⏳ 正在為 ${customerInfo.nickname} 加入購物車...`, 'loading');
+        showToast(`⏳ 正在為 ${customerInfo.nickname} 加入購物車...`, 'loading');
         try {
             const response = await chrome.runtime.sendMessage({
                 action: 'addToCart',
@@ -67,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             if (response && response.success) {
-                updateMarketStatus(`✅ 已將商品加入 ${customerInfo.nickname} 的購物車！`, 'success');
+                showToast(`✅ 已將商品加入 ${customerInfo.nickname} 的購物車！`, 'success');
                 const productToUpdate = productListData.find(p => p.id === productInfo.id);
                 if (productToUpdate) {
                     productToUpdate.stock_quantity -= quantity;
@@ -84,9 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 如果錯誤訊息 bizarrely 包含了「成功」字樣，我們就覆蓋掉它。
             if (errorText.includes('已成功加入')) {
-                 updateMarketStatus(`❌ 操作失敗：伺服器回傳了非預期的錯誤碼 (但操作可能已成功)。`, 'error');
+                 showToast(`❌ 操作失敗：伺服器回傳了非預期的錯誤碼 (但操作可能已成功)。`, 'error');
             } else {
-                 updateMarketStatus(`❌ 操作失敗: ${errorText}`, 'error');
+                 showToast(`❌ 操作失敗: ${errorText}`, 'error');
             }
         }
     }
@@ -106,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!websocket) return;
         websocket.onopen = () => {
             isLive = true; isPaused = false;
-            updateLiveStatus('✅ 已連接！正在監控留言...', 'success');
+            showToast('✅ 已連接！正在監控留言...', 'success');
             liveTitleInput.disabled = true; startLiveButton.classList.add('hidden');
             liveControlsDiv.classList.remove('hidden'); pauseResumeButton.textContent = '暫停直播';
         };
@@ -123,12 +126,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         const order = parseOrderComment(commentText);
 
                         if (order && uniqueId) {
-                            console.log("---------- [偵測到指令] ----------");
-                            // **【修改】** 使用正確的 user 變數
-                            console.log("收到的原始 User 物件:", user); 
-                            console.log("嘗試使用的 uniqueId:", user.uniqueId);
-                            console.log("---------------------------------");
-                            
                             const matchedProduct = productListData.find(p => {
                                 const callNumberMeta = p.meta_data.find(m => m.key === 'call_number');
                                 const callNumberMatch = callNumberMeta && callNumberMeta.value.toLowerCase() === order.callNumber.toLowerCase();
@@ -136,21 +133,35 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return callNumberMatch && isPublished;
                             });
                             if (matchedProduct) {
-                                console.log(`[有效指令] 用戶: ${nickname} (ID: ${uniqueId}), Call號: ${order.callNumber}, 數量: ${order.quantity}`);
                                 triggerAddToCart({ nickname, uniqueId }, matchedProduct, order.quantity);
+                                const orderLogItem = document.createElement('div');
+                                orderLogItem.className = 'order-log-item';
+                                // 按照你要求的格式
+                                orderLogItem.textContent = `[ ${uniqueId} ] ${nickname}: ${commentText}`; 
+                                orderLogListDiv.appendChild(orderLogItem);
+                                
+                                // 為這個新列表也應用 DOM Capping (使用我們之前添加的 MAX_COMMENTS_IN_LIST 常數)
+                                while (orderLogListDiv.children.length > MAX_COMMENTS_IN_LIST) {
+                                    orderLogListDiv.removeChild(orderLogListDiv.firstChild);
+                                }
+                                orderLogListDiv.scrollTop = orderLogListDiv.scrollHeight;
                             }
                         }
                         const commentItem = document.createElement('div');
                         commentItem.className = 'comment-item';
                         commentItem.innerHTML = `<b>${nickname}</b>: ${commentText}`;
                         commentListDiv.appendChild(commentItem);
+                        while (commentListDiv.children.length > MAX_COMMENTS_IN_LIST) {
+                            // 如果超過了，就移除最舊的那一條 (列表中的第一個子元素)
+                            commentListDiv.removeChild(commentListDiv.firstChild);
+                        }
                         commentListDiv.scrollTop = commentListDiv.scrollHeight;
                     }
                 });
             }
         };
-        websocket.onclose = (event) => { console.log('WebSocket 連線已關閉:', event); if (isLive) { updateLiveStatus(`🔌 連線已中斷。Code: ${event.code}`, 'error'); } };
-        websocket.onerror = (error) => { console.error('WebSocket 連線發生錯誤:', error); if (isLive && !isPaused) { updateLiveStatus('❌ 連線發生嚴重錯誤，請查看 Console。', 'error'); } };
+        websocket.onclose = (event) => { console.log('WebSocket 連線已關閉:', event); if (isLive) { showToast(`🔌 連線已中斷。Code: ${event.code}`, 'error'); } };
+        websocket.onerror = (error) => { console.error('WebSocket 連線發生錯誤:', error); if (isLive && !isPaused) { showToast('❌ 連線發生嚴重錯誤，請查看 Console。', 'error'); } };
     }
     
     // (其他所有函式都保持不變)
@@ -182,11 +193,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     async function handleBatchUpdate(operation, loadingMessage, successMessage) {
         if (productListData.length === 0) {
-            updateMarketStatus('列表無商品可操作', 'info');
+            showToast('列表無商品可操作', 'info');
             return;
         }
         const productIds = productListData.map(p => p.id);
-        updateMarketStatus(loadingMessage, 'loading');
+        showToast(loadingMessage, 'loading');
         try {
             const response = await chrome.runtime.sendMessage({
                 action: 'batchUpdateProducts',
@@ -198,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(response.error || '批次操作失敗');
             }
         } catch (error) {
-            updateMarketStatus(`❌ ${error.message}`, 'error');
+            showToast(`❌ ${error.message}`, 'error');
         }
     }
     publishAllBtn.addEventListener('click', () => handleBatchUpdate('publishAll', '⏳ 正在全數上架...', '✅ 已全數上架！'));
@@ -210,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const productId = parseInt(checkbox.dataset.id, 10);
             const newStatus = checkbox.checked ? 'publish' : 'draft';
             checkbox.disabled = true;
-            updateMarketStatus(`⏳ 正在將商品 #${productId} 更新為 "${newStatus}"...`, 'loading');
+            showToast(`⏳ 正在將商品 #${productId} 更新為 "${newStatus}"...`, 'loading');
             try {
                 const response = await chrome.runtime.sendMessage({
                     action: 'updateProduct',
@@ -218,14 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     data: { status: newStatus }
                 });
                 if (response && response.success) {
-                    updateMarketStatus(`✅ 商品 #${productId} 狀態已更新！`, 'success');
+                    showToast(`✅ 商品 #${productId} 狀態已更新！`, 'success');
                     const productToUpdate = productListData.find(p => p.id === productId);
                     if(productToUpdate) productToUpdate.status = newStatus;
                 } else {
                     throw new Error(response.error || '狀態更新失敗');
                 }
             } catch (error) {
-                updateMarketStatus(`❌ ${error.message}`, 'error');
+                showToast(`❌ ${error.message}`, 'error');
                 checkbox.checked = !checkbox.checked;
             } finally {
                 checkbox.disabled = false;
@@ -247,6 +258,46 @@ document.addEventListener('DOMContentLoaded', () => {
         currentEditingProductId = null;
     }
     modalCancelButton.addEventListener('click', closeModal);
+
+    // *** 新增程式碼：為「更新時間」按鈕添加監聽器 ***
+    modalUpdateTimeButton.addEventListener('click', async () => {
+        if (!currentEditingProductId) return;
+
+        // 1. 產生與「上架」功能相同的時間戳記
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        const descriptionContent = `商品上架時間：${timestamp}`; // 或者您可以改成「商品更新時間：」
+
+        modalStatus.textContent = '⏳ 正在更新時間戳記...';
+        modalUpdateTimeButton.disabled = true;
+        modalUpdateButton.disabled = true; // 同時禁用另一個按鈕避免衝突
+
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'updateProduct',
+                productId: currentEditingProductId,
+                data: { 
+                    description: descriptionContent // 只發送 description 資料
+                } 
+            });
+
+            if (response && response.success) {
+                modalStatus.textContent = '✅ 時間已更新！';
+                setTimeout(() => {
+                    closeModal(); // 成功後關閉視窗
+                }, 1000);
+                // 注意：我們不需要重新載入列表，因為列表上不顯示說明
+            } else {
+                throw new Error(response.error || '更新失敗');
+            }
+        } catch (error) {
+            modalStatus.textContent = `❌ ${error.message}`;
+        } finally {
+            modalUpdateTimeButton.disabled = false;
+            modalUpdateButton.disabled = false;
+        }
+    });
+
     modalUpdateButton.addEventListener('click', async () => {
         if (!currentEditingProductId) return;
         const qty = modalProductQty.value;
@@ -273,17 +324,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     async function loadAndRenderProducts() {
-        updateMarketStatus('🔄 正在載入商品列表...', 'loading');
+        showToast('🔄 正在載入商品列表...', 'loading');
         try {
             const response = await chrome.runtime.sendMessage({ action: 'getProducts' });
             if (response && response.success) {
                 renderProducts(response.data);
-                updateMarketStatus('✅ 商品列表已更新', 'success');
+                showToast('✅ 商品列表已更新', 'success');
             } else {
                 throw new Error(response.error || '載入列表失敗');
             }
         } catch (error) {
-            updateMarketStatus(`❌ ${error.message}`, 'error');
+            showToast(`❌ ${error.message}`, 'error');
         }
     }
     onMarketButton.addEventListener('click', async () => {
@@ -292,16 +343,21 @@ document.addEventListener('DOMContentLoaded', () => {
         let qty = productQtyInput.value.trim();
         const callNumber = productCallInput.value.trim();
         const shippingClassSlug = shippingClassSelector.value;
+
+        // 1. 產生標準格式的當前時間
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        const descriptionContent = `商品上架時間：${timestamp}`;
         if (!name || !price) {
-            return updateMarketStatus('❌ 名稱與價格為必填！', 'error');
+            return showToast('❌ 名稱與價格為必填！', 'error');
         }
         if (qty === '') qty = '999';
-        updateMarketStatus('⏳ 正在上架商品...', 'loading');
+        showToast('⏳ 正在上架商品...', 'loading');
         onMarketButton.disabled = true;
         try {
             const response = await chrome.runtime.sendMessage({
                 action: 'createProduct',
-                data: { name, qty, price, callNumber, shippingClassSlug }
+                data: { name, qty, price, callNumber, shippingClassSlug, description: descriptionContent }
             });
             if (response && response.success) {
                 productNameInput.value = '';
@@ -313,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(response.error || '上架失敗');
             }
         } catch (error) {
-            updateMarketStatus(`❌ ${error.message}`, 'error');
+            showToast(`❌ ${error.message}`, 'error');
         } finally {
             onMarketButton.disabled = false;
         }
@@ -387,21 +443,60 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("載入運送類別時出錯:", error);
         }
     }
-    function updateMarketStatus(message, type = 'info') {
-        marketStatus.textContent = message;
-        marketStatus.style.color = { 'info': '#6c757d', 'success': '#28a745', 'error': '#dc3545', 'loading': '#007bff' }[type];
+    
+        // *** 全新功能：吐司通知 (Toast Notification) 產生器 ***
+    // (這個函式取代了 updateMarketStatus 和 updateLiveStatus)
+    function showToast(message, type = 'info', duration = 4000) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        // 1. 建立元素
+        const toast = document.createElement('div');
+        toast.className = `toast-notification toast-${type}`;
+        
+        const messageNode = document.createElement('span');
+        messageNode.textContent = message;
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'toast-close-btn';
+        closeBtn.innerHTML = '&times;'; // 這是 'X' 符號
+
+        // 2. 綁定關閉邏輯
+        const closeToast = () => {
+            toast.classList.add('fadeout'); // 觸發 CSS 淡出動畫
+            // 動畫結束後 (500ms) 再從 DOM 中移除
+            setTimeout(() => {
+                if (toast.parentNode === container) { // 再次檢查，防止重複移除
+                    container.removeChild(toast);
+                }
+            }, 500);
+        };
+
+        closeBtn.onclick = closeToast; // 讓 X 按鈕可以觸發關閉
+
+        // 3. 組合並顯示
+        toast.appendChild(messageNode);
+        toast.appendChild(closeBtn);
+        container.appendChild(toast);
+        toast.classList.add('fadein'); // 觸發 CSS 淡入動畫
+
+        // 4. 設定自動關閉計時器
+        // (如果是 'loading' 類型，我們給它一個很長的時間，因為它通常會被後續的 success/error 通知取代)
+        let autoCloseDuration = duration;
+        if (type === 'loading') {
+            autoCloseDuration = 3000; // Loading 訊息最多顯示 20 秒
+        }
+
+        setTimeout(closeToast, autoCloseDuration);
     }
-    function updateLiveStatus(message, type = 'info') {
-        liveStatus.textContent = message;
-        liveStatus.style.color = { 'info': '#6c757d', 'success': '#28a745', 'error': '#dc3545', 'loading': '#007bff' }[type];
-    }
+
     startLiveButton.addEventListener('click', async () => {
         const currentTitle = liveTitleInput.value;
         const parts = currentTitle.split('-');
         if (parts.length !== 2 || parts[0].length !== 6 || parts[1].length !== 2) {
-            return updateLiveStatus('❌ 標題格式不正確 (應為 YYMMDD-SS)', 'error');
+            return showToast('❌ 標題格式不正確 (應為 YYMMDD-SS)', 'error');
         }
-        updateLiveStatus('🔑 正在請求連線網址...', 'loading');
+        showToast('🔑 正在請求連線網址...', 'loading');
         try {
             const response = await chrome.runtime.sendMessage({ action: 'getSignedUrl' });
             if (!response || !response.success || !response.data.signedUrl) {
@@ -409,12 +504,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const signedUrl = response.data.signedUrl;
             console.log('成功獲取簽名網址:', signedUrl);
-            updateLiveStatus('📡 驗證成功，正在連接到直播...', 'loading');
+            showToast('📡 驗證成功，正在連接到直播...', 'loading');
             websocket = new WebSocket(signedUrl);
             setupWebSocketListeners(); // 呼叫函式
         } catch (err) {
             console.error('連線過程中發生錯誤:', err);
-            updateLiveStatus(`❌ 連線失敗: ${err.message}`, 'error');
+            showToast(`❌ 連線失敗: ${err.message}`, 'error');
         }
     });
     
@@ -423,14 +518,14 @@ document.addEventListener('DOMContentLoaded', () => {
         isPaused = !isPaused;
         if (isPaused) {
             if (websocket) websocket.close();
-            updateLiveStatus('⏸️ 直播已暫停。', 'info');
+            showToast('⏸️ 直播已暫停。', 'info');
             pauseResumeButton.textContent = '恢復直播';
         } else { startLiveButton.click(); }
     });
     endLiveButton.addEventListener('click', () => {
         if (websocket) websocket.close();
         websocket = null; isLive = false; isPaused = false;
-        updateLiveStatus(`⏹️ 直播 "${liveTitleInput.value}" 已結束。`, 'info');
+        showToast(`⏹️ 直播 "${liveTitleInput.value}" 已結束。`, 'info');
         liveTitleInput.disabled = false; liveControlsDiv.classList.add('hidden');
         startLiveButton.classList.remove('hidden'); pauseResumeButton.textContent = '暫停直播';
         commentListDiv.innerHTML = ''; suggestLiveTitle();

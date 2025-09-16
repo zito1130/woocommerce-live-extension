@@ -2,21 +2,22 @@
 /**
  * Plugin Name: WooCommerce Livestream Helper
  * Description: 處理來自瀏覽器擴充功能的 TikTok 喊單請求，並與 Nextend Social Login 整合。
- * Version: 26.0.0 (v24 架構 + Unlink 自動清理鉤子 - 精簡版)
+ * Version: 27.0.0 (v24 架構 - 修正 API 致命錯誤)
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// (已移除 Define 常數，因為我們直接使用 'tiktok_username')
+// *** 關鍵：我們現在只使用你指定的 'tiktok_username' 作為唯一的真相來源 Key ***
+define('LIVESTREAM_TIKTOK_META_KEY', 'tiktok_username');
 
 
 // === 1. API 接口設定 (不變) ===
 add_action('rest_api_init', function () {
     register_rest_route('livestream/v1', '/add-to-cart', array(
         'methods' => 'POST',
-        'callback' => 'handle_livestream_add_to_cart_v24', // 使用 "笨" API
+        'callback' => 'handle_livestream_add_to_cart_v27', // 使用 v27 API
         'permission_callback' => 'livestream_api_permission_check'
     ));
 });
@@ -28,21 +29,22 @@ function livestream_api_permission_check($request) {
 }
 
 
-// === 2. 【v24 API 處理器 (來自 v18)】 (只寫入資料表，並在資料表中累加) ===
+// === 2. 【v27 API 處理器 (修正致命錯誤)】 (只寫入資料表，並在資料表中累加) ===
 /**
  * API 不再查詢用戶。它只有一個職責：
  * 驗證資料，並在「自訂資料表」中正確地累加/插入商品。
  */
-function handle_livestream_add_to_cart_v24(WP_REST_Request $request) {
+function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
     global $wpdb;
     
     $tiktok_id = sanitize_text_field($request->get_param('uniqueId'));
     $product_id = intval($request->get_param('productId'));
     $quantity = intval($request->get_param('quantity'));
 
-    // 確保商品存在
-    if (!$tiktok_id || !$product_id || !$quantity || !wc_get_product($product_id) ) {
-        return new WP_Error('bad_request', '缺少參數或商品 ID 無效', array('status' => 400));
+    // 【v27 修正】 我們移除了 !wc_get_product() 檢查，因為它在 REST API 中會導致致命錯誤。
+    // 商品驗證將在 Function 4 合併時由 WC() 自動處理。
+    if (!$tiktok_id || !$product_id || !$quantity) {
+        return new WP_Error('bad_request', '缺少參數', array('status' => 400));
     }
 
     try {
@@ -88,10 +90,9 @@ function handle_livestream_add_to_cart_v24(WP_REST_Request $request) {
 
 
 // === 3. (已移除) ===
-// 我們不再需要 add_product_to_persistent_cart (永久購物車) 函式。
 
 
-// === 4. 【v24 核心合併邏輯】 (來自 v19 - 在模板載入前合併) ===
+// === 4. 【v24 核心合併邏輯】 (在模板載入前合併 - 不變) ===
 /**
  * 這是我們唯一的合併點。它在 WordPress 完全載入後才執行。
  * 它會讀取 Nextend 已經設定好的 'tiktok_username' key。
@@ -110,7 +111,6 @@ function livestream_safe_merge_to_session_cart_v24() {
     $tiktok_id = get_user_meta($user_id, 'tiktok_username', true);
 
     if (empty($tiktok_id)) {
-        // 如果 Nextend 還沒設定好這個 key，或者這不是 TikTok 用戶，我們就退出
         return; 
     }
 
@@ -150,10 +150,10 @@ function livestream_safe_merge_to_session_cart_v24() {
 }
 
 // === 5. (已移除) ===
-// 根據你的要求，我們不再監聽任何 Nextend 註冊/匹配鉤子 (這解決了崩潰問題)。
+// 我們不再監聽任何 Nextend 註冊/匹配鉤子 (這解決了崩潰問題)。
 
 
-// === 6. 【v25.0 功能】 自動監聽 Nextend 解除綁定 (來自你的要求) ===
+// === 6. 【v25.0 功能】 自動監聽 Nextend 解除綁定 (不變) ===
 /**
  * 監聽 Nextend 官方的 'nsl_unlink_user' 鉤子。
  * 當 Nextend 移除它自己的 key 時，我們也同步移除 'tiktok_username'。

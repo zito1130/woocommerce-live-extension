@@ -7,6 +7,7 @@
 </head>
 <body>
 
+    <div id="toast-container"></div>
     <nav class="tab-buttons">
         <button class="tab-button active" data-tab="live">直播管理</button>
         <button class="tab-button" data-tab="settings">商店設定</button>
@@ -31,7 +32,6 @@
                         <button class="control-button pause" id="pauseResumeButton">暫停直播</button>
                         <button class="control-button end" id="endLiveButton">結束直播</button>
                     </div>
-                    <div id="liveStatus" class="live-status-area"></div>
                     <hr>
                     <div class="products-on-market">
                         <h3>商品上架</h3>
@@ -47,7 +47,6 @@
                             </select>
                         </div>
                         <button class="submit-button" id="onMarketButton">上架</button>
-                        <div id="marketStatus" class="market-status-area"></div>
                     </div>
                     <hr>
                     <div class="product-list-area">
@@ -66,6 +65,9 @@
                 <div class="live-comments-column">
                     <h3>即時留言</h3>
                     <div id="comment-list"></div>
+                    <hr>
+                    <h3>喊單紀錄</h3>
+                    <div id="order-log-list"></div>
                 </div>
             </div>
         </div>
@@ -104,6 +106,7 @@
             </div>
             <div class="modal-actions">
                 <button id="modalCancelButton" class="control-button pause">取消</button>
+                <button id="modalUpdateTimeButton" class="control-button pause" style="background-color: #ffc107;">更新時間</button>
                 <button id="modalUpdateButton" class="control-button end">確認更新</button>
             </div>
             <div id="modalStatus" class="market-status-area"></div>

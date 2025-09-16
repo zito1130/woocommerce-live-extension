@@ -65,6 +65,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
                 const bodyPayload = {
                     name: productData.name, type: 'simple', regular_price: productData.price,
+                    description: productData.description || '',
                     manage_stock: true, stock_quantity: productData.qty,
                     categories: settings.defaultCategoryId ? [{ id: parseInt(settings.defaultCategoryId, 10) }] : [],
                     meta_data: [], shipping_class: productData.shippingClassSlug || ""
@@ -99,6 +100,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (data.qty !== undefined) bodyPayload.stock_quantity = data.qty;
                 if (data.callNumber !== undefined) bodyPayload.meta_data = [{ key: 'call_number', value: data.callNumber }];
                 if (data.status !== undefined) bodyPayload.status = data.status;
+                if (data.description !== undefined) bodyPayload.description = data.description;
                 if (Object.keys(bodyPayload).length === 0) {
                     return sendResponse({ success: true, data: { id: productId } });
                 }

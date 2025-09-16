@@ -5,9 +5,87 @@ body { min-width: 500px; font-family: sans-serif; padding: 10px; margin: 0; }
 .live-layout-container { display: flex; gap: 20px; }
 .live-controls-column, .live-comments-column { flex: 1; min-width: 240px; }
 .live-title-area { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-#comment-list { border: 1px solid #ccc; border-radius: 5px; height: 500px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; }
+#comment-list { border: 1px solid #ccc; border-radius: 5px; height: 357.5px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; }
 .comment-item { margin-bottom: 8px; padding: 5px; border-radius: 4px; background-color: #f1f1f1; word-break: break-all; }
-.market-status-area { height: 15px; margin-top: 8px; font-size: 14px; text-align: center; }
+#order-log-list {
+    border: 1px solid #28a745;
+    border-radius: 5px; 
+    height: 240px;
+    overflow-y: auto; 
+    padding: 8px; 
+    display: flex; 
+    flex-direction: column;
+}
+
+.order-log-item {
+    margin-bottom: 8px; 
+    padding: 5px; 
+    border-radius: 4px; 
+    background-color: #eaf6ec;
+    word-break: break-all;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+#toast-container {
+    position: fixed; /* 固定在視窗中 */
+    top: 10px;
+    right: 15px;
+    z-index: 2000; /* 確保在最上層 */
+    width: 300px;
+}
+
+.toast-notification {
+    position: relative;
+    padding: 12px 30px 12px 15px; /* 右側留空間給關閉按鈕 */
+    margin-bottom: 10px;
+    border-radius: 5px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    opacity: 0; /* 預設透明，用於動畫 */
+}
+
+/* 關閉按鈕 (X) */
+.toast-close-btn {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    font-size: 20px;
+    font-weight: bold;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    line-height: 1;
+}
+.toast-close-btn:hover {
+    color: #fff;
+}
+
+/* 類型樣式 */
+.toast-success { background-color: #28a745; }
+.toast-error   { background-color: #dc3545; }
+.toast-info    { background-color: #6c757d; }
+.toast-loading { background-color: #007bff; }
+
+
+/* 淡入淡出動畫 */
+.toast-notification.fadein {
+    animation: toastFadeIn 0.5s forwards;
+}
+.toast-notification.fadeout {
+    animation: toastFadeOut 0.5s forwards;
+}
+
+@keyframes toastFadeIn {
+    from { opacity: 0; transform: translateX(100%); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastFadeOut {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(100%); }
+}
 
 /* --- 商品列表 --- */
 .list-header {
@@ -17,7 +95,7 @@ body { min-width: 500px; font-family: sans-serif; padding: 10px; margin: 0; }
     margin-bottom: 10px;
 }
 .list-header h3 { margin: 0; }
-.batch-actions { display: flex; gap: 5px; }
+.batch-actions { display: flex; gap: 5px; margin-bottom: 0px; }
 .batch-button {
     font-size: 10px;
     padding: 4px 6px;
@@ -57,7 +135,6 @@ body { min-width: 500px; font-family: sans-serif; padding: 10px; margin: 0; }
 #saveButton, #testButton { width: 80%; margin: 0 20px; }
 .hidden { display: none !important; }
 .live-controls-area { display: flex; gap: 10px; margin-top: 10px; }
-.live-status-area { height: 15px; }
 .control-button { flex: 1; border-radius: 5px; color: white; border: none; }
 .control-button.pause { background-color: #ffc107; }
 .control-button.pause:hover { background-color: #e0a800; }

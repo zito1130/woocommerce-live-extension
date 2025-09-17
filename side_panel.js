@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(`⚠️ ${customerInfo.nickname} 下單失敗，庫存不足！`, 'error');
             return;
         }
-        showToast(`⏳ 正在為 ${customerInfo.nickname} 加入購物車...`, 'loading');
+        // showToast(`⏳ 正在為 ${customerInfo.nickname} 加入購物車...`, 'loading');
         try {
             const response = await chrome.runtime.sendMessage({
                 action: 'addToCart',
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             if (response && response.success) {
-                showToast(`✅ 已將商品加入 ${customerInfo.nickname} 的購物車！`, 'success');
+                // showToast(`✅ 已將商品加入 ${customerInfo.nickname} 的購物車！`, 'success');
                 const productToUpdate = productListData.find(p => p.id === productInfo.id);
                 if (productToUpdate) {
                     productToUpdate.stock_quantity -= quantity;
@@ -528,7 +528,9 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`⏹️ 直播 "${liveTitleInput.value}" 已結束。`, 'info');
         liveTitleInput.disabled = false; liveControlsDiv.classList.add('hidden');
         startLiveButton.classList.remove('hidden'); pauseResumeButton.textContent = '暫停直播';
-        commentListDiv.innerHTML = ''; suggestLiveTitle();
+        commentListDiv.innerHTML = ''; orderLogListDiv.innerHTML = '';
+        suggestLiveTitle();
+        
     });
     function updateLiveManagementDisplay(username) {
         if (username) {

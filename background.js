@@ -73,6 +73,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (productData.callNumber) {
                     bodyPayload.meta_data.push({ key: 'call_number', value: productData.callNumber });
                 }
+
+                if (productData.supplierId) {
+                    bodyPayload.meta_data.push({ key: '_cm_supplier_id', value: productData.supplierId });
+                }
+                
                 const createResponse = await fetch(createUrl, {
                     method: 'POST', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
                     body: JSON.stringify(bodyPayload)

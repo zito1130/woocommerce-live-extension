@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WooCommerce Livestream Helper
  * Description: 處理來自瀏覽器擴充功能的 TikTok 喊單請求，並與 Nextend Social Login 整合。
- * Version: 27.0.0 (v24 架構 - 修正 API 致命錯誤)
+ * Version: 28.0.0 (v24 架構 + 新增供應商 API)
  */
 
 if (!defined('ABSPATH')) {
@@ -13,12 +13,21 @@ if (!defined('ABSPATH')) {
 define('LIVESTREAM_TIKTOK_META_KEY', 'tiktok_username');
 
 
-// === 1. API 接口設定 (不變) ===
+// === 1. API 接口設定 (修改：新增 /get-suppliers 路由) ===
 add_action('rest_api_init', function () {
+    // 處理喊單的 API (不變)
     register_rest_route('livestream/v1', '/add-to-cart', array(
         'methods' => 'POST',
         'callback' => 'handle_livestream_add_to_cart_v27', // 使用 v27 API
         'permission_callback' => 'livestream_api_permission_check'
+    ));
+
+    // 【全新 v28.0 功能】 獲取供應商列表的 API
+    register_rest_route('livestream/v1', '/get-suppliers', array(
+        'methods' => 'GET',
+        'callback' => 'livestream_get_supplier_list_api',
+        // 我們使用 WooCommerce 的標準權限回呼，這將允許使用 API 金鑰 (Basic Auth) 驗證
+        'permission_callback' => 'livestream_api_get_permission_check' 
     ));
 });
 
@@ -28,12 +37,17 @@ function livestream_api_permission_check($request) {
     return $sent_key === $secret_key ? true : new WP_Error('rest_forbidden', '無效的密鑰。', array('status' => 401));
 }
 
+// 【全新 v28.0 功能】 GET 請求的權限檢查 (使用 WC API 金鑰)
+function livestream_api_get_permission_check( $request ) {
+    // 檢查用戶是否可以管理 WooCommerce (這允許 Cookie 登入的管理員，或使用 API 金鑰)
+    if ( current_user_can('manage_woocommerce') ) {
+        return true;
+    }
+    return new WP_Error( 'rest_forbidden', '您沒有權限執行此操作。', array( 'status' => 401 ) );
+}
+
 
 // === 2. 【v27 API 處理器 (修正致命錯誤)】 (只寫入資料表，並在資料表中累加) ===
-/**
- * API 不再查詢用戶。它只有一個職責：
- * 驗證資料，並在「自訂資料表」中正確地累加/插入商品。
- */
 function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
     global $wpdb;
     
@@ -41,14 +55,11 @@ function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
     $product_id = intval($request->get_param('productId'));
     $quantity = intval($request->get_param('quantity'));
 
-    // 【v27 修正】 我們移除了 !wc_get_product() 檢查，因為它在 REST API 中會導致致命錯誤。
-    // 商品驗證將在 Function 4 合併時由 WC() 自動處理。
     if (!$tiktok_id || !$product_id || !$quantity) {
         return new WP_Error('bad_request', '缺少參數', array('status' => 400));
     }
 
     try {
-        // 無論用戶是誰，一律寫入「待處理」資料表。
         $table_name = $wpdb->prefix . 'livestream_pending_carts';
         
         $existing_item = $wpdb->get_row($wpdb->prepare(
@@ -57,7 +68,6 @@ function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
         ));
 
         if ($existing_item) {
-            // 找到了！正確累加數量
             $new_quantity = $existing_item->quantity + $quantity;
             $wpdb->update(
                 $table_name,
@@ -65,7 +75,6 @@ function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
                 array('id' => $existing_item->id)
             );
         } else {
-            // 沒找到，插入新的一行
             $wpdb->insert(
                 $table_name,
                 array(
@@ -77,10 +86,9 @@ function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
             );
         }
 
-        // 合併的工作將 100% 交給 Function 4 (template_redirect 鉤子) 處理。
         return new WP_REST_Response(array(
             'success' => true, 
-            'message' => '商品已成功暫存。' // 統一回傳「暫存」訊息
+            'message' => '商品已成功暫存。' 
         ), 200);
 
     } catch (Exception $e) {
@@ -93,42 +101,29 @@ function handle_livestream_add_to_cart_v27(WP_REST_Request $request) {
 
 
 // === 4. 【v24 核心合併邏輯】 (在模板載入前合併 - 不變) ===
-/**
- * 這是我們唯一的合併點。它在 WordPress 完全載入後才執行。
- * 它會讀取 Nextend 已經設定好的 'tiktok_username' key。
- */
 add_action('template_redirect', 'livestream_safe_merge_to_session_cart_v24');
 function livestream_safe_merge_to_session_cart_v24() {
     
-    // 1. 確保我們在安全的環境執行 (template_redirect 只在前端執行)
     if ( ! function_exists('WC') || ! is_object(WC()->session) || ! is_object(WC()->cart) || ! is_user_logged_in() || ! WC()->session->has_session() ) {
         return;
     }
-
     $user_id = get_current_user_id();
-    
-    // 2. 獲取當前登入用戶的 TikTok ID (只讀取 'tiktok_username' key)
     $tiktok_id = get_user_meta($user_id, 'tiktok_username', true);
 
     if (empty($tiktok_id)) {
         return; 
     }
 
-    // 3. 檢查自訂資料表是否有這個 ID 的待處理商品
     global $wpdb;
     $table_name = $wpdb->prefix . 'livestream_pending_carts';
-
     $pending_items = $wpdb->get_results($wpdb->prepare(
         "SELECT product_id, quantity FROM $table_name WHERE tiktok_unique_id = %s ORDER BY created_at ASC", 
         $tiktok_id
     ));
 
     if (empty($pending_items)) {
-        return; // 沒有待處理商品。
+        return;
     }
-
-    // 4. 【正確邏輯】 找到了！我們現在直接呼叫 WC()->cart->add_to_cart()
-    // 這個原生函式會自動處理堆疊（累加）到「即時 Session 購物車」。
     
     $cart_merged = false;
     foreach ($pending_items as $item) {
@@ -139,10 +134,7 @@ function livestream_safe_merge_to_session_cart_v24() {
     }
     
     if ($cart_merged) {
-        // 成功合併後，清除自訂資料表中的紀錄
         $wpdb->delete($table_name, array('tiktok_unique_id' => $tiktok_id), array('%s'));
-        
-        // (重要) 同步即時 Session 和永久購物車資料庫
         if ( is_object( WC()->cart ) ) {
             WC()->cart->persistent_cart_update();
         }
@@ -150,25 +142,45 @@ function livestream_safe_merge_to_session_cart_v24() {
 }
 
 // === 5. (已移除) ===
-// 我們不再監聽任何 Nextend 註冊/匹配鉤子 (這解決了崩潰問題)。
 
 
 // === 6. 【v25.0 功能】 自動監聽 Nextend 解除綁定 (不變) ===
-/**
- * 監聽 Nextend 官方的 'nsl_unlink_user' 鉤子。
- * 當 Nextend 移除它自己的 key 時，我們也同步移除 'tiktok_username'。
- */
 add_action('nsl_unlink_user', 'livestream_handle_user_unlink_v25', 10, 3);
-
 function livestream_handle_user_unlink_v25($user_id, $provider_id, $unlinked_social_id) {
-    
-    // 我們只關心 TikTok 的解除綁定
     if ($provider_id === 'tiktok') {
-        
-        // Nextend 移除了它自己的 Key，我們現在也必須移除 'tiktok_username'
-        // (因為 Nextend 忘記移除了，所以我們幫它移除)
         delete_user_meta($user_id, 'tiktok_username');
     }
+}
+
+
+// === 7. 【全新 v28.0 API 實作】 ===
+/**
+ * 獲取所有供應商列表（ID 和 暱稱）
+ * 這會被擴充功能的「商品設置」頁籤呼叫
+ */
+function livestream_get_supplier_list_api() {
+    // 抓取所有角色為 'supplier' 的用戶 (來自 cart-manager 插件)
+    $suppliers = get_users( array( 'role' => 'supplier' ) );
+    $options = array();
+
+    foreach ( $suppliers as $supplier ) {
+        // 優先抓取 'nickname' (暱稱)，如果為空，則回退到 user_login (帳號)
+        // (這符合 cart-manager 插件的邏輯)
+        $display_name = $supplier->nickname;
+        if ( empty( $display_name ) ) {
+            $display_name = $supplier->user_login;
+        }
+
+        $options[] = array(
+            'id'   => $supplier->ID,
+            'name' => $display_name
+        );
+    }
+    
+    // 返回一個 "站方商品" 選項 (ID 設為空字串)
+    array_unshift($options, array('id' => '', 'name' => '無 (站方商品)'));
+
+    return new WP_REST_Response( $options, 200 );
 }
 
 ?>

@@ -34,6 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveCategoryButton = document.getElementById('saveCategoryButton');
     const categoryStatusDiv = document.getElementById('categoryStatus');
     const currentCategoryDisplay = document.getElementById('currentCategoryDisplay');
+    const supplierSelector = document.getElementById('supplierSelector');
+    const saveSupplierButton = document.getElementById('saveSupplierButton');
+    const supplierStatusDiv = document.getElementById('supplierStatus');
+    const currentSupplierDisplay = document.getElementById('currentSupplierDisplay');
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabPanes = document.querySelectorAll('.tab-pane');
     const productNameInput = document.getElementById('productName');
@@ -355,9 +359,23 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('⏳ 正在上架商品...', 'loading');
         onMarketButton.disabled = true;
         try {
+            // *** 【v28.2 關鍵修正】 (開始) ***
+            // 我們必須先從 Chrome Storage 異步讀取儲存的供應商 ID
+            const settings = await chrome.storage.sync.get('defaultSupplierId');
+            const supplierId = settings.defaultSupplierId || ''; // 獲取 ID，如果未設定則為空字串 (代表站方)
+            // *** 【v28.2 關鍵修正】 (結束) ***
+
             const response = await chrome.runtime.sendMessage({
                 action: 'createProduct',
-                data: { name, qty, price, callNumber, shippingClassSlug, description: descriptionContent }
+                data: { 
+                    name, 
+                    qty, 
+                    price, 
+                    callNumber, 
+                    shippingClassSlug, 
+                    description: descriptionContent,
+                    supplierId: supplierId // <-- *** 將讀取到的 ID 添加到 data 中 ***
+                }
             });
             if (response && response.success) {
                 productNameInput.value = '';
@@ -388,6 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (tabId === 'products') {
                 loadOrRefreshCategories().catch(err => console.error(err));
+                loadAndRenderSuppliers().catch(err => console.error(err));
             }
         });
     });
@@ -408,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => categoryStatusDiv.textContent = '', 3000);
         });
     });
-    chrome.storage.sync.get([ 'storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId', 'defaultCategoryName', 'eulerstreamKey', 'tiktokUsername' ], (result) => {
+    chrome.storage.sync.get([ 'storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId', 'defaultCategoryName', 'eulerstreamKey', 'tiktokUsername', 'defaultSupplierId', 'defaultSupplierName' ], (result) => {
         if (result.storeUrl) storeUrlInput.value = result.storeUrl;
         if (result.consumerKey) consumerKeyInput.value = result.consumerKey;
         if (result.consumerSecret) consumerSecretInput.value = result.consumerSecret;
@@ -417,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         suggestLiveTitle();
         updateCurrentCategoryDisplay(result.defaultCategoryName);
         updateLiveManagementDisplay(result.tiktokUsername);
+        updateCurrentSupplierDisplay(result.defaultSupplierName);
         loadShippingClasses();
         loadAndRenderProducts();
     });
@@ -618,9 +638,106 @@ document.addEventListener('DOMContentLoaded', () => {
         statusDiv.textContent = '📡 正在測試商店連線...';
         try {
             await loadOrRefreshCategories();
+            await loadAndRenderSuppliers();
             statusDiv.textContent = '✅ 商店連線成功且分類已載入！';
         } catch (error) {
             statusDiv.textContent = `❌ 商店連線失敗: ${error.message}`;
         }
+    });
+
+    /**
+     * 更新供應商的當前設定顯示
+     */
+    function updateCurrentSupplierDisplay(supplierName) {
+        if (supplierName) {
+            currentSupplierDisplay.textContent = supplierName;
+            currentSupplierDisplay.style.color = '#28a745';
+        } else {
+            currentSupplierDisplay.textContent = '尚未設定 (預設將為 站方)';
+            currentSupplierDisplay.style.color = '#dc3545';
+        }
+    }
+
+    /**
+     * 將從 API 獲取的供應商列表填充到下拉選單中
+     */
+    function populateSupplierSelector(suppliers, savedSupplierId) {
+        supplierSelector.innerHTML = ''; // 清空現有選項
+        
+        suppliers.forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier.id;
+            option.textContent = supplier.name; // (API 已回傳暱稱)
+            supplierSelector.appendChild(option);
+        });
+
+        if (savedSupplierId) {
+            supplierSelector.value = savedSupplierId;
+        } else {
+             supplierSelector.value = ""; // 預設選中 "站方"
+        }
+        supplierSelector.disabled = false;
+    }
+
+
+    /**
+     * 從我們的 v28 API 端點獲取供應商列表
+     */
+    async function fetchSuppliers(settings) {
+        const apiUrl = `${settings.storeUrl}/wp-json/livestream/v1/get-suppliers`;
+        const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
+        
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': authHeader
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`獲取供應商失敗: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+
+    /**
+     * 載入並渲染供應商下拉選單的主函式
+     */
+    async function loadAndRenderSuppliers() {
+        supplierStatusDiv.textContent = '🔄 正在載入供應商列表...';
+        try {
+            const data = await chrome.storage.sync.get(['storeUrl', 'consumerKey', 'consumerSecret', 'defaultSupplierId', 'defaultSupplierName']);
+            if (!data.storeUrl || !data.consumerKey || !data.consumerSecret) {
+                throw new Error('商店設定不完整');
+            }
+            
+            const suppliers = await fetchSuppliers(data);
+            populateSupplierSelector(suppliers, data.defaultSupplierId);
+            updateCurrentSupplierDisplay(data.defaultSupplierName);
+            supplierStatusDiv.textContent = `✅ 供應商列表已更新！`;
+
+        } catch (error) {
+            supplierStatusDiv.textContent = `❌ ${error.message}`;
+            supplierSelector.disabled = true;
+        }
+    }
+
+    /**
+     * 儲存預設供應商按鈕的事件監聽器
+     */
+    saveSupplierButton.addEventListener('click', () => {
+        const selectedOption = supplierSelector.options[supplierSelector.selectedIndex];
+        const selectedSupplierId = selectedOption.value;
+        const selectedSupplierName = selectedOption.text;
+
+        chrome.storage.sync.set({ 
+            defaultSupplierId: selectedSupplierId, // ID 可能是空字串 (站方)
+            defaultSupplierName: selectedSupplierName 
+        }, () => {
+            updateCurrentSupplierDisplay(selectedSupplierName);
+            supplierStatusDiv.textContent = `✅ 已儲存預設供應商！`;
+            setTimeout(() => supplierStatusDiv.textContent = '', 3000);
+        });
     });
 });

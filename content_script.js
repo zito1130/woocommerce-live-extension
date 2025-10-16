@@ -1,21 +1,20 @@
-// woocommerce-extension/content_script.js (完整替換)
+// woocommerce-extension/content_script.js (修正後版本)
 
 let cropPreviewOverlay = null;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // 【v34.0 新增】 指令一：更新或顯示預覽框
     if (request.action === 'updatePreview') {
         showCropArea(request.selector, request.scale);
         sendResponse({ success: true });
 
-    // 【v34.0 新增】 指令二：隱藏預覽框
     } else if (request.action === 'hidePreview') {
         hideCropArea();
         sendResponse({ success: true });
 
-    // (以下為原有功能，保持不變)
     } else if (request.action === 'startCountdownOnPage') {
-        hideCropArea(); // 開始倒數前，確保預覽框消失
+        // 【*** 關鍵修正 ***】
+        // 移除 hideCropArea(); 這一行。
+        // 現在是否隱藏預覽框完全由側邊欄面板在截圖前後決定。
         createAndStartCountdown();
         sendResponse({ success: true });
         

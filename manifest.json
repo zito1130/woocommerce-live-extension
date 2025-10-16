@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "WooCommerce 直播助手",
-    "version": "0.2.0",
+    "version": "0.4.0",
     "description": "一個用於管理 WooCommerce 直播商品的擴充功能。",
     "icons": {
         "16": "images/icon16.png",
@@ -10,11 +10,12 @@
     },
     "permissions": [
         "storage",
-        "sidePanel"
+        "sidePanel",
+        "activeTab",
+        "scripting"
     ],
     "host_permissions": [
-        "https://*.luosifenshop.com/*",
-        "*://ws.eulerstream.com/*"
+        "<all_urls>"
     ],
     "action": {
         "default_title": "開啟 WooCommerce 直播助手"
@@ -24,5 +25,11 @@
     },
     "side_panel": {
         "default_path": "side_panel.html"
-    }
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [ "content_style.css" ],
+            "matches": [ "<all_urls>" ]
+        }
+    ]
 }

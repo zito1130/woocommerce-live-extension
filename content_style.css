@@ -1,0 +1,32 @@
+/* 這個 CSS 會被注射到 TikTok 頁面中 */
+
+#livestream-countdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;  /* 覆蓋整個視窗寬度 */
+    height: 100vh; /* 覆蓋整個視窗高度 */
+    background-color: rgba(0, 0, 0, 0.5); /* 半透明黑色 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999; /* 確保在頁面最頂層 */
+    pointer-events: none; /* 讓滑鼠可以穿透 */
+}
+
+#livestream-countdown-number {
+    color: white;
+    font-size: 30vw; /* 數字大小會根據視窗寬度調整 */
+    font-weight: bold;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-stroke: 4px black; /* 文字外框，使其在任何背景下都清晰可見 */
+    text-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+
+#livestream-crop-preview-overlay {
+    position: fixed; /* 相對於瀏覽器視窗定位 */
+    border: 3px dashed red; /* 紅色、粗的虛線 */
+    box-sizing: border-box; /* 確保邊框不會增加元素尺寸 */
+    z-index: 999998; /* 層級略低於倒數計時數字，但高於頁面內容 */
+    pointer-events: none; /* 讓滑鼠可以穿透這個框，不會擋到頁面操作 */
+}

@@ -1,4 +1,5 @@
-// (onClicked 監聽器和 checkDuplicateCallNumber 輔助函式不變)
+// woocommerce-extension/background.js (完整替換)
+
 chrome.action.onClicked.addListener((tab) => {
   try {
     chrome.sidePanel.open({ tabId: tab.id });
@@ -20,9 +21,8 @@ async function checkDuplicateCallNumber(settings, productData, productIdToExclud
     }
 }
 
-// --- 主要監聽器 ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // (getSignedUrl, getProducts, createProduct, updateProduct, batchUpdateProducts 動作不變)
+    // (getSignedUrl, getProducts, createProduct, updateProduct, batchUpdateProducts, addToCart 保持不變)
     if (request.action === 'getSignedUrl') {
         chrome.storage.sync.get(['eulerstreamKey', 'tiktokUsername'], (settings) => {
             if (chrome.runtime.lastError || !settings.tiktokUsername || !settings.eulerstreamKey) {
@@ -153,42 +153,90 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true;
     }
-    
-    // ***【新功能】*** 動作六：加入到指定用戶的購物車
     if (request.action === 'addToCart') {
         chrome.storage.sync.get(['storeUrl'], async (settings) => {
             if (!settings.storeUrl) {
                 return sendResponse({ success: false, error: '商店網址未設定。' });
             }
-
-            // !! 重要：這裡的密鑰必須和您在 PHP 插件中設定的完全一樣
             const secretKey = '7732DDB4F15A5'; 
-
             const apiUrl = `${settings.storeUrl}/wp-json/livestream/v1/add-to-cart`;
             const payload = request.data;
-
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Livestream-Secret': secretKey // 加上我們自訂的驗證標頭
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Livestream-Secret': secretKey },
                     body: JSON.stringify(payload)
                 });
-
-                const responseData = await response.json();
                 if (!response.ok) {
-                    throw new Error(responseData.message || `HTTP 錯誤: ${response.status}`);
+                    const errorText = await response.text();
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        throw new Error(errorJson.message || `HTTP 錯誤: ${response.status}`);
+                    } catch (e) {
+                        throw new Error(`伺服器回傳了非 JSON 格式的錯誤 (狀態碼: ${response.status})`);
+                    }
                 }
-                
+                const responseData = await response.json();
                 sendResponse({ success: true, data: responseData });
-
             } catch (error) {
                 console.error('加入購物車 API 呼叫失敗:', error);
                 sendResponse({ success: false, error: error.message });
             }
         });
+        return true;
+    }
+
+    // *** 【v32.0 關鍵修正】 動作：只獲取資料，不處理圖片 ***
+    if (request.action === 'takeScreenshot') {
+        const { tabId, selector } = request;
+        if (!tabId || !selector) {
+            return sendResponse({ success: false, error: '請求中未提供分頁 ID 或選擇器。' });
+        }
+
+        (async () => {
+            try {
+                const tab = await chrome.tabs.get(tabId);
+                const url = tab.url;
+                if (url && (url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:'))) {
+                    throw new Error('無法在瀏覽器內部頁面上截圖。');
+                }
+
+                await chrome.scripting.insertCSS({ target: { tabId: tabId }, files: ['content_style.css'] });
+                await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ['content_script.js'] });
+
+                // 【v34.0 修改】 移除預覽指令，因為 side_panel 會負責
+
+                // 直接開始倒數
+                await chrome.tabs.sendMessage(tabId, { action: 'startCountdownOnPage' });
+                
+                await new Promise(resolve => setTimeout(resolve, 3200)); 
+                
+                const rectResponse = await chrome.tabs.sendMessage(tabId, {
+                    action: 'getElementRect',
+                    selector: selector
+                });
+                
+                if (!rectResponse || !rectResponse.success) {
+                    throw new Error(rectResponse.error || '無法從頁面獲取元素座標。');
+                }
+                
+                const fullScreenshotDataUrl = await chrome.tabs.captureVisibleTab(
+                    null, { format: 'jpeg', quality: 95 }
+                );
+
+                sendResponse({ 
+                    success: true, 
+                    data: {
+                        fullScreenshot: fullScreenshotDataUrl,
+                        rect: rectResponse.data
+                    } 
+                });
+            } catch (error) {
+                console.error("截圖流程失敗 (background):", error);
+                sendResponse({ success: false, error: error.message || '未知錯誤' });
+            }
+        })();
+        
         return true;
     }
 });

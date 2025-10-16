@@ -151,3 +151,111 @@ input { width: 95%; padding: 5px; }
 button { width: 100%; padding: 8px; cursor: pointer; }
 hr { margin: 10px 0; }
 h3 { margin-top: 0; }
+
+/* --- v29.0 新增：截圖功能樣式 --- */
+.screenshot-area {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+#screenshotButton {
+    background-color: #6c757d; /* 灰色 */
+}
+#screenshotButton:hover {
+    background-color: #5a6268;
+}
+
+#screenshotPreview {
+    width: 100%;
+    height: auto;
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    min-height: 50px; /* 預留一個最小高度 */
+}
+
+#screenshotPreview:not(.hidden) {
+    display: block; /* 當有圖片時顯示 */
+}
+
+#countdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 3000; /* 必須在吐司通知之上 */
+    color: white;
+    font-size: 150px;
+    font-weight: bold;
+    -webkit-text-stroke: 2px black; /* 文字外框，使其更清晰 */
+}
+
+#countdown-overlay.hidden {
+    display: none;
+}
+
+.toggle-switch-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 15px;
+}
+.toggle-switch-container label[for="livePreviewToggle"] {
+    margin-bottom: 0; /* 覆蓋通用 label 樣式 */
+}
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+input:checked + .slider {
+    background-color: #2196F3;
+}
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+.slider.round {
+    border-radius: 34px;
+}
+.slider.round:before {
+    border-radius: 50%;
+}

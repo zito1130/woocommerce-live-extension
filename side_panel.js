@@ -1,5 +1,7 @@
+// woocommerce-extension/side_panel.js (完整替換)
+
 document.addEventListener('DOMContentLoaded', () => {
-    // (所有元素宣告和狀態變數不變)
+    // --- 元素宣告和狀態變數 (保持不變) ---
     const productsListDiv = document.getElementById('productsList');
     const modal = document.getElementById('editProductModal');
     const modalProductName = document.getElementById('modalProductName');
@@ -17,7 +19,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderLogListDiv = document.getElementById('order-log-list');
     const liveTitleInput = document.getElementById('liveTitle');
     const startLiveButton = document.getElementById('startLiveButton');
-    const liveStatus = document.getElementById('liveStatus');
     const liveControlsDiv = document.getElementById('liveControls');
     const pauseResumeButton = document.getElementById('pauseResumeButton');
     const endLiveButton = document.getElementById('endLiveButton');
@@ -45,8 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const productPriceInput = document.getElementById('productPrice');
     const productCallInput = document.getElementById('productCall');
     const onMarketButton = document.getElementById('onMarketButton');
-    const marketStatus = document.getElementById('marketStatus');
     const shippingClassSelector = document.getElementById('shippingClassSelector');
+    const screenshotButton = document.getElementById('screenshotButton');
+    const screenshotPreview = document.getElementById('screenshotPreview');
+    const screenshotSelectorInput = document.getElementById('screenshotSelector');
+    const screenshotScaleInput = document.getElementById('screenshotScale');
+    const livePreviewToggle = document.getElementById('livePreviewToggle');
 
     let currentEditingProductId = null;
     let productListData = [];
@@ -56,14 +61,60 @@ document.addEventListener('DOMContentLoaded', () => {
     let categoriesCache = null;
     let lastFetchTimestamp = 0;
     const MAX_COMMENTS_IN_LIST = 500;
+    
+    // side_panel.js (修正為可縮放的正方形裁切)
+    function cropImageByCoords(base64DataUrl, rect, scale = 1.0) { // scale 預期是 0.1 到 1.0 之間
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                // 應用裝置像素比例 (處理高解析度螢幕)
+                const dpr = rect.devicePixelRatio || 1;
+                const rectW = rect.width * dpr;
+                const rectH = rect.height * dpr;
+                const rectX = rect.x * dpr;
+                const rectY = rect.y * dpr;
 
-    // --- 3. 核心函式 ---
+                // 1. 找出較短的一邊，作為最大可能的正方形邊長
+                const maxSideLength = Math.min(rectW, rectH);
+                
+                if (maxSideLength <= 0) {
+                    return reject(new Error('裁切範圍無效，目標元素尺寸為 0。'));
+                }
+
+                // 2. 應用使用者設定的縮放比例，得到最終的裁切邊長
+                const finalSideLength = maxSideLength * scale;
+
+                // 3. 計算原始矩形的中心點
+                const centerX = rectX + rectW / 2;
+                const centerY = rectY + rectH / 2;
+
+                // 4. 計算正方形左上角的「裁切起始座標 (sx, sy)」
+                const sx = centerX - finalSideLength / 2;
+                const sy = centerY - finalSideLength / 2;
+
+                // 5. 繪製到 Canvas 上
+                const canvas = document.createElement('canvas');
+                canvas.width = finalSideLength;
+                canvas.height = finalSideLength;
+                const ctx = canvas.getContext('2d');
+                
+                // 從原始大圖中，擷取 (sx, sy) 位置的 finalSideLength * finalSideLength 區域，
+                // 然後繪製到 canvas 的 (0, 0) 位置上。
+                ctx.drawImage(img, sx, sy, finalSideLength, finalSideLength, 0, 0, finalSideLength, finalSideLength);
+
+                resolve(canvas.toDataURL('image/jpeg', 0.95));
+            };
+            img.onerror = () => reject(new Error('無法載入截圖進行裁切。'));
+            img.src = base64DataUrl;
+        });
+    }
+
+    // --- 核心函式 (triggerAddToCart, parseOrderComment, setupWebSocketListeners 等保持不變) ---
     async function triggerAddToCart(customerInfo, productInfo, quantity) {
         if (productInfo.stock_quantity < quantity) {
             showToast(`⚠️ ${customerInfo.nickname} 下單失敗，庫存不足！`, 'error');
             return;
         }
-        // showToast(`⏳ 正在為 ${customerInfo.nickname} 加入購物車...`, 'loading');
         try {
             const response = await chrome.runtime.sendMessage({
                 action: 'addToCart',
@@ -74,7 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             if (response && response.success) {
-                // showToast(`✅ 已將商品加入 ${customerInfo.nickname} 的購物車！`, 'success');
                 const productToUpdate = productListData.find(p => p.id === productInfo.id);
                 if (productToUpdate) {
                     productToUpdate.stock_quantity -= quantity;
@@ -88,8 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             const errorText = error.message || '未知錯誤';
-            
-            // 如果錯誤訊息 bizarrely 包含了「成功」字樣，我們就覆蓋掉它。
             if (errorText.includes('已成功加入')) {
                  showToast(`❌ 操作失敗：伺服器回傳了非預期的錯誤碼 (但操作可能已成功)。`, 'error');
             } else {
@@ -123,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (parsedData && parsedData.messages && Array.isArray(parsedData.messages)) {
                 parsedData.messages.forEach(msg => {
                     if (msg && msg.data && msg.data.comment && msg.data.user) {
-                        const user = msg.data.user; // **【修改】** 先定義好 user 變數
+                        const user = msg.data.user;
                         const nickname = user.nickname || '用戶';
                         const uniqueId = user.uniqueId || null;
                         const commentText = msg.data.comment;
@@ -140,11 +188,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 triggerAddToCart({ nickname, uniqueId }, matchedProduct, order.quantity);
                                 const orderLogItem = document.createElement('div');
                                 orderLogItem.className = 'order-log-item';
-                                // 按照你要求的格式
                                 orderLogItem.textContent = `[ ${uniqueId} ] ${nickname}: ${commentText}`; 
                                 orderLogListDiv.appendChild(orderLogItem);
                                 
-                                // 為這個新列表也應用 DOM Capping (使用我們之前添加的 MAX_COMMENTS_IN_LIST 常數)
                                 while (orderLogListDiv.children.length > MAX_COMMENTS_IN_LIST) {
                                     orderLogListDiv.removeChild(orderLogListDiv.firstChild);
                                 }
@@ -156,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         commentItem.innerHTML = `<b>${nickname}</b>: ${commentText}`;
                         commentListDiv.appendChild(commentItem);
                         while (commentListDiv.children.length > MAX_COMMENTS_IN_LIST) {
-                            // 如果超過了，就移除最舊的那一條 (列表中的第一個子元素)
                             commentListDiv.removeChild(commentListDiv.firstChild);
                         }
                         commentListDiv.scrollTop = commentListDiv.scrollHeight;
@@ -168,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
         websocket.onerror = (error) => { console.error('WebSocket 連線發生錯誤:', error); if (isLive && !isPaused) { showToast('❌ 連線發生嚴重錯誤，請查看 Console。', 'error'); } };
     }
     
-    // (其他所有函式都保持不變)
+    // (renderProducts, handleBatchUpdate, openModal, closeModal 等所有非截圖函式都保持不變)
     async function renderProducts(products) {
         productListData = products;
         productsListDiv.innerHTML = '';
@@ -263,34 +308,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     modalCancelButton.addEventListener('click', closeModal);
 
-    // *** 新增程式碼：為「更新時間」按鈕添加監聽器 ***
     modalUpdateTimeButton.addEventListener('click', async () => {
         if (!currentEditingProductId) return;
-
-        // 1. 產生與「上架」功能相同的時間戳記
         const now = new Date();
         const timestamp = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        const descriptionContent = `商品上架時間：${timestamp}`; // 或者您可以改成「商品更新時間：」
-
+        const descriptionContent = `商品上架時間：${timestamp}`;
         modalStatus.textContent = '⏳ 正在更新時間戳記...';
         modalUpdateTimeButton.disabled = true;
-        modalUpdateButton.disabled = true; // 同時禁用另一個按鈕避免衝突
-
+        modalUpdateButton.disabled = true;
         try {
             const response = await chrome.runtime.sendMessage({
                 action: 'updateProduct',
                 productId: currentEditingProductId,
                 data: { 
-                    description: descriptionContent // 只發送 description 資料
+                    description: descriptionContent
                 } 
             });
-
             if (response && response.success) {
                 modalStatus.textContent = '✅ 時間已更新！';
                 setTimeout(() => {
-                    closeModal(); // 成功後關閉視窗
+                    closeModal();
                 }, 1000);
-                // 注意：我們不需要重新載入列表，因為列表上不顯示說明
             } else {
                 throw new Error(response.error || '更新失敗');
             }
@@ -341,50 +379,68 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(`❌ ${error.message}`, 'error');
         }
     }
+    
+    // *** 【v32.0 修正】 onMarketButton (只修改 try 區塊) ***
     onMarketButton.addEventListener('click', async () => {
         const name = productNameInput.value.trim();
         const price = productPriceInput.value.trim();
         let qty = productQtyInput.value.trim();
         const callNumber = productCallInput.value.trim();
         const shippingClassSlug = shippingClassSelector.value;
-
-        // 1. 產生標準格式的當前時間
         const now = new Date();
         const timestamp = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        const descriptionContent = `商品上架時間：${timestamp}`;
-        if (!name || !price) {
-            return showToast('❌ 名稱與價格為必填！', 'error');
-        }
+        
+        if (!name || !price) return showToast('❌ 名稱與價格為必填！', 'error');
         if (qty === '') qty = '999';
-        showToast('⏳ 正在上架商品...', 'loading');
+        
         onMarketButton.disabled = true;
-        try {
-            // *** 【v28.2 關鍵修正】 (開始) ***
-            // 我們必須先從 Chrome Storage 異步讀取儲存的供應商 ID
-            const settings = await chrome.storage.sync.get('defaultSupplierId');
-            const supplierId = settings.defaultSupplierId || ''; // 獲取 ID，如果未設定則為空字串 (代表站方)
-            // *** 【v28.2 關鍵修正】 (結束) ***
 
+        try {
+            showToast('📸 準備截圖... 3秒後將擷取直播畫面！', 'info', 3500);
+            
+            // 1. 獲取 Tab ID 和 Selector
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const selector = screenshotSelectorInput.value.trim();
+            const scaleValue = parseInt(screenshotScaleInput.value, 10) / 100;
+            if (!tab || !tab.id) throw new Error("無法獲取當前分頁 ID。");
+            if (!selector) throw new Error('請先在「商品設置」中指定截圖的 CSS 選擇器。');
+            
+            // 2. 請求 background 執行截圖並回傳原始資料
             const response = await chrome.runtime.sendMessage({
+                action: 'takeScreenshot',
+                tabId: tab.id,
+                selector: selector
+            });
+
+            if (!response || !response.success) {
+                throw new Error(response.error || '從 background 獲取截圖資料失敗');
+            }
+
+            // 將 scaleValue 傳遞給裁切函式
+            const croppedDataUrl = await cropImageByCoords(response.data.fullScreenshot, response.data.rect, scaleValue);
+            
+            showToast('✅ 截圖成功！準備上傳...', 'success');
+            screenshotPreview.src = croppedDataUrl;
+            screenshotPreview.classList.remove('hidden');
+            
+            // 4. (後續建立商品的邏輯保持不變)
+            const settings = await chrome.storage.sync.get('defaultSupplierId');
+            const supplierId = settings.defaultSupplierId || '';
+            const createResponse = await chrome.runtime.sendMessage({
                 action: 'createProduct',
                 data: { 
-                    name, 
-                    qty, 
-                    price, 
-                    callNumber, 
-                    shippingClassSlug, 
-                    description: descriptionContent,
-                    supplierId: supplierId // <-- *** 將讀取到的 ID 添加到 data 中 ***
+                    name, qty, price, callNumber, shippingClassSlug, 
+                    description: `商品上架時間：${timestamp}`,
+                    supplierId: supplierId
                 }
             });
-            if (response && response.success) {
-                productNameInput.value = '';
-                productQtyInput.value = '';
-                productPriceInput.value = '';
-                productCallInput.value = '';
+
+            if (createResponse && createResponse.success) {
+                productNameInput.value = ''; productQtyInput.value = '';
+                productPriceInput.value = ''; productCallInput.value = '';
                 await loadAndRenderProducts();
             } else {
-                throw new Error(response.error || '上架失敗');
+                throw new Error(createResponse.error || '上架失敗');
             }
         } catch (error) {
             showToast(`❌ ${error.message}`, 'error');
@@ -392,6 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
             onMarketButton.disabled = false;
         }
     });
+
+    // (tabButtons, saveCategoryButton 等非截圖相關事件監聽器保持不變)
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
             const tabId = button.getAttribute('data-tab');
@@ -427,28 +485,37 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => categoryStatusDiv.textContent = '', 3000);
         });
     });
-    chrome.storage.sync.get([ 'storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId', 'defaultCategoryName', 'eulerstreamKey', 'tiktokUsername', 'defaultSupplierId', 'defaultSupplierName' ], (result) => {
+
+    // --- 唯一的設定讀取與初始化區塊 ---
+    chrome.storage.sync.get([ 
+        'storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId', 'defaultCategoryName', 
+        'eulerstreamKey', 'tiktokUsername',
+        'defaultSupplierId', 'defaultSupplierName',
+        'screenshotSelector', 'screenshotScale', 'livePreviewEnabled'
+    ], (result) => {
+        // 填充所有輸入框
         if (result.storeUrl) storeUrlInput.value = result.storeUrl;
         if (result.consumerKey) consumerKeyInput.value = result.consumerKey;
         if (result.consumerSecret) consumerSecretInput.value = result.consumerSecret;
         if (result.eulerstreamKey) eulerstreamKeyInput.value = result.eulerstreamKey;
         if (result.tiktokUsername) tiktokUsernameInput.value = result.tiktokUsername;
+        screenshotSelectorInput.value = result.screenshotSelector || '.relative.w-full.flex-1';
+        screenshotScaleInput.value = result.screenshotScale || '80';
+        livePreviewToggle.checked = !!result.livePreviewEnabled;
+        
+        // 更新顯示狀態
         suggestLiveTitle();
         updateCurrentCategoryDisplay(result.defaultCategoryName);
         updateLiveManagementDisplay(result.tiktokUsername);
         updateCurrentSupplierDisplay(result.defaultSupplierName);
+        
+        // 載入動態資料
         loadShippingClasses();
         loadAndRenderProducts();
+
+        // 關鍵：在載入設定後，立即根據當前狀態同步一次預覽
+        updatePreviewVisibility(); 
     });
-    function populateShippingClassSelector(shippingClasses) {
-        shippingClassSelector.innerHTML = '<option value="">-- 預設運送類別 --</option>';
-        shippingClasses.forEach(sc => {
-            const option = document.createElement('option');
-            option.value = sc.slug; 
-            option.textContent = sc.name;
-            shippingClassSelector.appendChild(option);
-        });
-    }
     async function loadShippingClasses() {
         try {
             const settings = await chrome.storage.sync.get(['storeUrl', 'consumerKey', 'consumerSecret']);
@@ -463,50 +530,66 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("載入運送類別時出錯:", error);
         }
     }
+
+    function populateShippingClassSelector(shippingClasses) {
+    // 找到 HTML 中的運送類別下拉選單元素
+    const selector = document.getElementById('shippingClassSelector');
+    if (!selector) return; // 如果找不到元素就直接返回
+
+    // 清空現有選項，並保留第一個預設選項
+    selector.innerHTML = '<option value="">-- 運送類別 --</option>';
+
+    // 遍歷從 API 獲取的所有運送類別
+    shippingClasses.forEach(shippingClass => {
+        // 建立一個新的 <option> 元素
+        const option = document.createElement('option');
+        
+        // 設定選項的值為該類別的 "slug" (這是 API 需要的格式)
+        option.value = shippingClass.slug; 
+        
+        // 設定選項顯示的文字為該類別的名稱
+        option.textContent = shippingClass.name;
+        
+        // 將建立好的選項加入到下拉選單中
+        selector.appendChild(option);
+    });
+}
     
-        // *** 全新功能：吐司通知 (Toast Notification) 產生器 ***
-    // (這個函式取代了 updateMarketStatus 和 updateLiveStatus)
     function showToast(message, type = 'info', duration = 4000) {
         const container = document.getElementById('toast-container');
         if (!container) return;
 
-        // 1. 建立元素
+        // 限制通知數量的邏輯 (保持不變)
+        const MAX_TOASTS = 3;
+        while (container.children.length >= MAX_TOASTS) {
+            container.removeChild(container.firstChild);
+        }
+
         const toast = document.createElement('div');
         toast.className = `toast-notification toast-${type}`;
-        
         const messageNode = document.createElement('span');
         messageNode.textContent = message;
-        
         const closeBtn = document.createElement('span');
         closeBtn.className = 'toast-close-btn';
-        closeBtn.innerHTML = '&times;'; // 這是 'X' 符號
-
-        // 2. 綁定關閉邏輯
+        closeBtn.innerHTML = '&times;';
         const closeToast = () => {
-            toast.classList.add('fadeout'); // 觸發 CSS 淡出動畫
-            // 動畫結束後 (500ms) 再從 DOM 中移除
+            toast.classList.add('fadeout');
             setTimeout(() => {
-                if (toast.parentNode === container) { // 再次檢查，防止重複移除
+                if (toast.parentNode === container) {
                     container.removeChild(toast);
                 }
             }, 500);
         };
-
-        closeBtn.onclick = closeToast; // 讓 X 按鈕可以觸發關閉
-
-        // 3. 組合並顯示
+        closeBtn.onclick = closeToast;
         toast.appendChild(messageNode);
         toast.appendChild(closeBtn);
         container.appendChild(toast);
-        toast.classList.add('fadein'); // 觸發 CSS 淡入動畫
-
-        // 4. 設定自動關閉計時器
-        // (如果是 'loading' 類型，我們給它一個很長的時間，因為它通常會被後續的 success/error 通知取代)
-        let autoCloseDuration = duration;
-        if (type === 'loading') {
-            autoCloseDuration = 3000; // Loading 訊息最多顯示 20 秒
-        }
-
+        toast.classList.add('fadein');
+        
+        // 【v35.1 修正】 移除錯誤判斷，確保所有通知都會自動關閉。
+        // 為 'loading' 類型設定一個預設的較短消失時間，
+        // 因為它通常很快會被 'success' 或 'error' 通知所取代。
+        const autoCloseDuration = (type === 'loading') ? 3500 : duration;
         setTimeout(closeToast, autoCloseDuration);
     }
 
@@ -526,14 +609,13 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('成功獲取簽名網址:', signedUrl);
             showToast('📡 驗證成功，正在連接到直播...', 'loading');
             websocket = new WebSocket(signedUrl);
-            setupWebSocketListeners(); // 呼叫函式
+            setupWebSocketListeners();
         } catch (err) {
             console.error('連線過程中發生錯誤:', err);
             showToast(`❌ 連線失敗: ${err.message}`, 'error');
         }
     });
     
-    // (其他函式不變)
     pauseResumeButton.addEventListener('click', () => {
         isPaused = !isPaused;
         if (isPaused) {
@@ -550,7 +632,6 @@ document.addEventListener('DOMContentLoaded', () => {
         startLiveButton.classList.remove('hidden'); pauseResumeButton.textContent = '暫停直播';
         commentListDiv.innerHTML = ''; orderLogListDiv.innerHTML = '';
         suggestLiveTitle();
-        
     });
     function updateLiveManagementDisplay(username) {
         if (username) {
@@ -626,7 +707,10 @@ document.addEventListener('DOMContentLoaded', () => {
             consumerKey: consumerKeyInput.value.trim(),
             consumerSecret: consumerSecretInput.value.trim(),
             eulerstreamKey: eulerstreamKeyInput.value.trim(),
-            tiktokUsername: tiktokUsernameInput.value.trim()
+            tiktokUsername: tiktokUsernameInput.value.trim(),
+            screenshotSelector: screenshotSelectorInput.value.trim(),
+            screenshotScale: screenshotScaleInput.value.trim(),
+            livePreviewEnabled: livePreviewToggle.checked
         };
         chrome.storage.sync.set(settings, () => {
             statusDiv.textContent = '✅ 所有設定已儲存！';
@@ -645,9 +729,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    /**
-     * 更新供應商的當前設定顯示
-     */
     function updateCurrentSupplierDisplay(supplierName) {
         if (supplierName) {
             currentSupplierDisplay.textContent = supplierName;
@@ -658,52 +739,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * 將從 API 獲取的供應商列表填充到下拉選單中
-     */
     function populateSupplierSelector(suppliers, savedSupplierId) {
-        supplierSelector.innerHTML = ''; // 清空現有選項
-        
+        supplierSelector.innerHTML = '';
         suppliers.forEach(supplier => {
             const option = document.createElement('option');
             option.value = supplier.id;
-            option.textContent = supplier.name; // (API 已回傳暱稱)
+            option.textContent = supplier.name;
             supplierSelector.appendChild(option);
         });
-
         if (savedSupplierId) {
             supplierSelector.value = savedSupplierId;
         } else {
-             supplierSelector.value = ""; // 預設選中 "站方"
+             supplierSelector.value = "";
         }
         supplierSelector.disabled = false;
     }
 
-
-    /**
-     * 從我們的 v28 API 端點獲取供應商列表
-     */
     async function fetchSuppliers(settings) {
         const apiUrl = `${settings.storeUrl}/wp-json/livestream/v1/get-suppliers`;
         const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
-        
         const response = await fetch(apiUrl, {
             method: 'GET',
             headers: {
                 'Authorization': authHeader
             }
         });
-        
         if (!response.ok) {
             throw new Error(`獲取供應商失敗: ${response.status}`);
         }
         return await response.json();
     }
 
-
-    /**
-     * 載入並渲染供應商下拉選單的主函式
-     */
     async function loadAndRenderSuppliers() {
         supplierStatusDiv.textContent = '🔄 正在載入供應商列表...';
         try {
@@ -711,33 +777,140 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!data.storeUrl || !data.consumerKey || !data.consumerSecret) {
                 throw new Error('商店設定不完整');
             }
-            
             const suppliers = await fetchSuppliers(data);
             populateSupplierSelector(suppliers, data.defaultSupplierId);
             updateCurrentSupplierDisplay(data.defaultSupplierName);
             supplierStatusDiv.textContent = `✅ 供應商列表已更新！`;
-
         } catch (error) {
             supplierStatusDiv.textContent = `❌ ${error.message}`;
             supplierSelector.disabled = true;
         }
     }
 
-    /**
-     * 儲存預設供應商按鈕的事件監聽器
-     */
     saveSupplierButton.addEventListener('click', () => {
         const selectedOption = supplierSelector.options[supplierSelector.selectedIndex];
         const selectedSupplierId = selectedOption.value;
         const selectedSupplierName = selectedOption.text;
-
         chrome.storage.sync.set({ 
-            defaultSupplierId: selectedSupplierId, // ID 可能是空字串 (站方)
+            defaultSupplierId: selectedSupplierId,
             defaultSupplierName: selectedSupplierName 
         }, () => {
             updateCurrentSupplierDisplay(selectedSupplierName);
             supplierStatusDiv.textContent = `✅ 已儲存預設供應商！`;
             setTimeout(() => supplierStatusDiv.textContent = '', 3000);
+        });
+    });
+
+    // *** 【v32.0 修正】 screenshotButton ***
+    screenshotButton.addEventListener('click', async () => {
+        showToast('📸 準備截圖... 3秒後將擷取直播畫面！', 'info', 3500);
+        try {
+            // 1. 獲取 Tab ID 和 Selector
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const selector = screenshotSelectorInput.value.trim();
+            const scaleValue = parseInt(screenshotScaleInput.value, 10) / 100;
+            if (!tab || !tab.id) throw new Error("無法獲取當前分頁 ID。");
+            if (!selector) throw new Error('請先在「商品設置」中指定截圖的 CSS 選擇器。');
+
+            // 2. 請求 background 執行截圖並回傳原始資料
+            const response = await chrome.runtime.sendMessage({
+                action: 'takeScreenshot',
+                tabId: tab.id,
+                selector: selector
+            });
+
+            if (!response || !response.success) {
+                throw new Error(response.error || '從 background 獲取截圖資料失敗');
+            }
+
+            // 3. 在 side_panel 中執行裁切
+            const croppedDataUrl = await cropImageByCoords(response.data.fullScreenshot, response.data.rect, scaleValue);
+
+            // 4. 更新預覽
+            screenshotPreview.src = croppedDataUrl;
+            screenshotPreview.classList.remove('hidden');
+            showToast('✅ 截圖成功！', 'success');
+
+        } catch (error) {
+            console.error("截圖流程失敗:", error);
+            showToast(`❌ 截圖失敗: ${error.message}`, 'error');
+        }
+    });
+    // --- v35.3 全新重構：即時預覽核心邏輯 ---
+
+    /**
+     * 指令發送器：負責向內容腳本發送指令。
+     * @param {'update' | 'hide'} action - 要執行的動作。
+     */
+    async function sendPreviewCommand(action) {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab || !tab.id || tab.url.startsWith('chrome://')) return;
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content_script.js'] });
+            if (action === 'update') {
+                const selector = screenshotSelectorInput.value.trim();
+                const scale = parseInt(screenshotScaleInput.value, 10) / 100;
+                if (!selector || isNaN(scale) || scale <= 0) {
+                    await chrome.tabs.sendMessage(tab.id, { action: 'hidePreview' });
+                } else {
+                    await chrome.tabs.sendMessage(tab.id, { action: 'updatePreview', selector, scale });
+                }
+            } else if (action === 'hide') {
+                await chrome.tabs.sendMessage(tab.id, { action: 'hidePreview' });
+            }
+        } catch (error) {
+            if (!error.message.includes('Receiving end does not exist') && !error.message.includes('Cannot access')) {
+                 console.warn('發送預覽指令失敗:', error.message);
+            }
+        }
+    }
+
+    function updatePreviewVisibility() {
+        const currentTabEl = document.querySelector('.tab-button.active');
+        if (!currentTabEl) return;
+        const currentTabId = currentTabEl.getAttribute('data-tab');
+        const isPreviewTabActive = (currentTabId === 'live' || currentTabId === 'products');
+        if (livePreviewToggle.checked && isPreviewTabActive) {
+            sendPreviewCommand('update');
+        } else {
+            sendPreviewCommand('hide');
+        }
+    }
+    
+    // 當設定變動時，檢查是否要更新預覽
+    function handlePreviewUpdateRequest() {
+        if (livePreviewToggle.checked) {
+            sendPreviewCommand('update');
+        } else {
+            // 補上關鍵的 else 邏輯，確保開關關閉時能主動隱藏預覽框
+            sendPreviewCommand('hide');
+        }
+    }
+    
+    // 當開關狀態改變時的處理
+    livePreviewToggle.addEventListener('change', () => {
+        updatePreviewVisibility(); // 更新顯示
+        chrome.storage.sync.set({ livePreviewEnabled: livePreviewToggle.checked }); // 儲存狀態
+    });
+    
+    // 當輸入框內容改變時，即時更新預覽
+    screenshotSelectorInput.addEventListener('input', updatePreviewVisibility);
+    screenshotScaleInput.addEventListener('input', updatePreviewVisibility);
+
+    // 3. 切換頂部主分頁時
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // 使用 setTimeout 確保 DOM 的 'active' class 已更新，然後再判斷
+            setTimeout(updatePreviewVisibility, 0);
+        });
+    });
+
+    // 4. 當側邊欄關閉時，確保隱藏預覽框
+    window.addEventListener('unload', () => {
+        chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+            if (tab && tab.id) {
+                chrome.tabs.sendMessage(tab.id, { action: 'hidePreview' }).catch(e => {});
+            }
         });
     });
 });

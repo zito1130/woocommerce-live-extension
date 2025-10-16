@@ -35,7 +35,7 @@
                     <div class="products-on-market">
                         <h3>商品上架</h3>
                         <div class="products-info-area">
-                            <div class="screenshot-area">
+                            <div class="screenshot-area hidden">
                                 <img id="screenshotPreview" src="" alt="截圖預覽" class="hidden">
                                 <button class="submit-button" id="screenshotButton">截取直播畫面</button>
                             </div>
@@ -103,26 +103,27 @@
             <div class="current-setting"><span>目前預設供應商：</span><strong id="currentSupplierDisplay">尚未設定</strong></div>
             <div class="submit-area"><button class="submit-button" id="saveSupplierButton">儲存預設供應商</button></div>
             <div id="supplierStatus"></div>
-            <hr>
-
-            <h3>截圖設定</h3>
-            <p>請填入您要截取畫面的 HTML 元素的 CSS 選擇器。這會讓截圖功能只擷取該特定區塊。</p>
-            <div>
-                <label for="screenshotSelector">目標 CSS 選擇器</label>
-                <input type="text" id="screenshotSelector" placeholder=".example-class #example-id">
-            </div>
-
-            <div>
-                <label for="screenshotScale">截圖縮放比例 (%)</label>
-                <input type="number" id="screenshotScale" min="10" max="100" step="5">
-                <small style="font-size: 12px; color: #555;">縮小截圖範圍。100% 為最大正方形，建議值為 80%。</small>
-            </div>
-            <div class="toggle-switch-container">
-                <label for="livePreviewToggle">即時預覽</label>
-                <label class="switch">
-                    <input type="checkbox" id="livePreviewToggle">
-                    <span class="slider round"></span>
-                </label>
+            
+            <div class="hidden">
+                <hr>
+                <h3>截圖設定</h3>
+                <p>請填入您要截取畫面的 HTML 元素的 CSS 選擇器。這會讓截圖功能只擷取該特定區塊。</p>
+                <div>
+                    <label for="screenshotSelector">目標 CSS 選擇器</label>
+                    <input type="text" id="screenshotSelector" placeholder=".example-class #example-id">
+                </div>
+                <div>
+                    <label for="screenshotScale">截圖縮放比例 (%)</label>
+                    <input type="number" id="screenshotScale" min="10" max="100" step="5">
+                    <small style="font-size: 12px; color: #555;">縮小截圖範圍。100% 為最大正方形，建議值為 80%。</small>
+                </div>
+                <div class="toggle-switch-container">
+                    <label for="livePreviewToggle">即時預覽</label>
+                    <label class="switch">
+                        <input type="checkbox" id="livePreviewToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
             </div>
         </div>
     </main>

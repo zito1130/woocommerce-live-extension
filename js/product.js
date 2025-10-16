@@ -1,14 +1,13 @@
-// js/product.js (更新後版本)
+// woocommerce-extension/js/product.js (v40.0 - 移除截圖功能版本)
 import { elements } from './constants.js';
 import { showToast, openModal, closeModal } from './ui.js';
 import { api } from './api.js';
-import { takeAndPreviewScreenshot } from './screenshot.js'; // <-- 現在這個 import 會成功
+// import { takeAndPreviewScreenshot } from './screenshot.js'; // v40.0 移除
 
-// 將 productListData 保持在模組內部
 let productListData = [];
 let currentEditingProductId = null;
+// let lastScreenshotDataUrl = null; // v40.0 移除
 
-// 將渲染邏輯獨立出來，方便被其他模組呼叫
 export function renderProducts() {
     elements.productsListDiv.innerHTML = '';
     if (productListData.length === 0) {
@@ -36,20 +35,18 @@ export async function loadAndRenderProducts() {
     showToast('🔄 正在載入商品列表...', 'loading');
     try {
         const products = await api.getProducts();
-        productListData = products; // 更新模組內的資料
-        renderProducts(); // 重新渲染
+        productListData = products;
+        renderProducts();
         showToast('✅ 商品列表已更新', 'success');
     } catch (error) {
         showToast(`❌ ${error.message}`, 'error');
     }
 }
 
-// 導出一個 getter 函式，讓其他模組可以安全地取得資料
 export function getProductListData() {
     return productListData;
 }
 
-// (此處以下的程式碼與您原本的相同，保持不變)
 async function handleBatchUpdate(operation, loadingMessage, successMessage) {
     if (productListData.length === 0) return showToast('列表無商品可操作', 'info');
     const productIds = productListData.map(p => p.id);
@@ -65,21 +62,26 @@ async function handleBatchUpdate(operation, loadingMessage, successMessage) {
 export function initializeProductManagement() {
     loadAndRenderProducts();
 
+    // 【v40.0 修改】 移除截圖按鈕的事件
+    // elements.screenshotButton.addEventListener('click', ...);
+
     elements.onMarketButton.addEventListener('click', async () => {
         const { productNameInput, productQtyInput, productPriceInput, productCallInput, shippingClassSelector, onMarketButton } = elements;
         const name = productNameInput.value.trim();
         const price = productPriceInput.value.trim();
+
         if (!name || !price) return showToast('❌ 名稱與價格為必填！', 'error');
+        // if (!lastScreenshotDataUrl) return showToast('❌ 請先點擊「截取直播畫面」！', 'error'); // v40.0 移除
 
         onMarketButton.disabled = true;
+        showToast('⏳ 商品上架中...', 'loading'); // v40.0 修改提示文字
+
         try {
-            await takeAndPreviewScreenshot();
-            showToast('⏳ 商品上架中...', 'loading');
-            
             const now = new Date();
             const timestamp = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
             const settings = await chrome.storage.sync.get('defaultSupplierId');
 
+            // 【v40.0 修改】 移除 imageDataUrl 欄位
             await api.createProduct({
                 name,
                 price,
@@ -88,19 +90,25 @@ export function initializeProductManagement() {
                 shippingClassSlug: shippingClassSelector.value,
                 description: `商品上架時間：${timestamp}`,
                 supplierId: settings.defaultSupplierId || ''
+                // imageDataUrl: lastScreenshotDataUrl // v40.0 移除
             });
 
             productNameInput.value = ''; productQtyInput.value = '';
             productPriceInput.value = ''; productCallInput.value = '';
+            // elements.screenshotPreview.src = ''; // v40.0 移除
+            // elements.screenshotPreview.classList.add('hidden'); // v40.0 移除
+            // lastScreenshotDataUrl = null; // v40.0 移除
+
             await loadAndRenderProducts();
 
         } catch (error) {
-            showToast(`❌ ${error.message}`, 'error');
+            showToast(`❌ 上架失敗: ${error.message}`, 'error');
         } finally {
             onMarketButton.disabled = false;
         }
     });
 
+    // ... 以下程式碼保持不變 ...
     elements.publishAllBtn.addEventListener('click', () => handleBatchUpdate('publishAll', '⏳ 正在全數上架...', '✅ 已全數上架！'));
     elements.unpublishAllBtn.addEventListener('click', () => handleBatchUpdate('unpublishAll', '⏳ 正在全數下架...', '✅ 已全數下架！'));
     elements.clearCallNumbersBtn.addEventListener('click', () => handleBatchUpdate('clearCallNumbers', '⏳ 正在清空叫號...', '✅ 已清空所有叫號！'));

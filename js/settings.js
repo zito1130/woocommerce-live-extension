@@ -1,23 +1,16 @@
-// js/settings.js
+// js/settings.js (加入權限診斷版本)
 import { elements } from './constants.js';
 import { showToast, populateSelector, updateDisplay, suggestLiveTitle } from './ui.js';
 import { api } from './api.js';
 
-// 【*** 關鍵修正 ***】
-// 修改此函式，使其能正確處理 storageKey 為 null 的情況
 async function loadAndPopulate(apiMethod, selector, storageKey, displayElement, defaultText, valueField, nameField) {
     try {
         const items = await apiMethod();
-        
-        // 如果 storageKey 存在，才從 Chrome Storage 讀取資料；否則，使用一個空物件。
         const settings = storageKey ? await chrome.storage.sync.get([storageKey]) : {};
         const savedId = storageKey ? settings[storageKey] : null;
-
         populateSelector(selector, items, savedId, defaultText, valueField, nameField);
-        
         const selectedItem = items.find(i => i[valueField] == savedId);
         const selectedName = selectedItem ? selectedItem[nameField] : undefined;
-
         if (displayElement) {
             updateDisplay(displayElement, selectedName, !!savedId);
         }
@@ -62,19 +55,14 @@ export async function initializeSettings(loadAndRenderProducts) {
     updateDisplay(currentSupplierDisplay, result.defaultSupplierName, !!result.defaultSupplierId);
     if (!liveTitleInput.value) liveTitleInput.value = suggestLiveTitle();
 
-    // 這個呼叫現在是安全的了
     loadAndPopulate(api.fetchShippingClasses, elements.shippingClassSelector, null, null, '運送類別', 'slug', 'name');
     
     elements.saveButton.addEventListener('click', () => {
         const settings = {
-            storeUrl: storeUrlInput.value.trim(),
-            consumerKey: consumerKeyInput.value.trim(),
-            consumerSecret: consumerSecretInput.value.trim(),
-            eulerstreamKey: eulerstreamKeyInput.value.trim(),
-            tiktokUsername: tiktokUsernameInput.value.trim(),
-            screenshotSelector: screenshotSelectorInput.value.trim(),
-            screenshotScale: screenshotScaleInput.value.trim(),
-            livePreviewEnabled: livePreviewToggle.checked
+            storeUrl: storeUrlInput.value.trim(), consumerKey: consumerKeyInput.value.trim(),
+            consumerSecret: consumerSecretInput.value.trim(), eulerstreamKey: eulerstreamKeyInput.value.trim(),
+            tiktokUsername: tiktokUsernameInput.value.trim(), screenshotSelector: screenshotSelectorInput.value.trim(),
+            screenshotScale: screenshotScaleInput.value.trim(), livePreviewEnabled: livePreviewToggle.checked
         };
         chrome.storage.sync.set(settings, () => {
             showToast('✅ 所有設定已儲存！', 'success');
@@ -82,20 +70,29 @@ export async function initializeSettings(loadAndRenderProducts) {
         });
     });
 
+    // 【*** v38.0 關鍵修改 ***】
+    // 讓 "測試商店連線" 按鈕執行權限檢查
     elements.testButton.addEventListener('click', async () => {
-        elements.statusDiv.textContent = '📡 正在測試連線...';
+        elements.statusDiv.textContent = '📡 正在檢查 API 金鑰權限...';
         try {
-            await loadAndPopulate(api.fetchProductCategories, categorySelector, 'defaultCategoryId', currentCategoryDisplay, '一個分類', 'id', 'name');
-            await loadAndPopulate(api.fetchSuppliers, supplierSelector, 'defaultSupplierId', currentSupplierDisplay, '一個供應商', 'id', 'name');
-            elements.statusDiv.textContent = '✅ 連線成功且資料已載入！';
+            // 注意：這裡我們不再使用 api.js 裡的封裝，而是直接發送訊息
+            const response = await chrome.runtime.sendMessage({ action: 'checkPermissions' });
+            
+            if (response && response.success) {
+                // 如果成功，顯示從 PHP 來的訊息
+                elements.statusDiv.textContent = `✅ ${response.data.message}`;
+            } else {
+                // 如果失敗，顯示從 PHP 或 background.js 來的錯誤訊息
+                throw new Error(response.error || '未知的診斷錯誤');
+            }
         } catch (error) {
-            elements.statusDiv.textContent = `❌ 連線失敗: ${error.message}`;
+            elements.statusDiv.textContent = `❌ 診斷失敗: ${error.message}`;
         }
     });
 
     elements.saveCategoryButton.addEventListener('click', () => {
         const { selectedIndex, value, options } = categorySelector;
-        if (!value) return; // 避免儲存空值
+        if (!value) return;
         const selectedText = options[selectedIndex] ? options[selectedIndex].text : '';
         saveSetting('defaultCategoryId', value, 'defaultCategoryName', selectedText, elements.categoryStatusDiv, currentCategoryDisplay);
         loadAndRenderProducts();

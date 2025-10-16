@@ -1,10 +1,21 @@
-// woocommerce-extension/background.js (完整替換)
+// woocommerce-extension/background.js (v40.0 - 移除圖片上傳版本)
 
 chrome.action.onClicked.addListener((tab) => {
   try {
     chrome.sidePanel.open({ tabId: tab.id });
   } catch (error) { console.error("無法打開側邊欄:", error); }
 });
+
+async function checkApiPermissions(settings) {
+    const checkUrl = `${settings.storeUrl}/wp-json/livestream/v1/check-permissions`;
+    const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
+    const response = await fetch(checkUrl, { method: 'GET', headers: { 'Authorization': authHeader } });
+    const responseData = await response.json();
+    if (!response.ok) {
+        throw new Error(responseData.message || `伺服器錯誤: ${response.status}`);
+    }
+    return responseData;
+}
 
 async function checkDuplicateCallNumber(settings, productData, productIdToExclude = null) {
     if (!productData.callNumber || productData.callNumber.length === 0) return;
@@ -22,12 +33,20 @@ async function checkDuplicateCallNumber(settings, productData, productIdToExclud
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // (getSignedUrl, getProducts, createProduct, updateProduct, batchUpdateProducts, addToCart 保持不變)
+    if (request.action === 'checkPermissions') {
+        chrome.storage.sync.get(['storeUrl', 'consumerKey', 'consumerSecret'], async (settings) => {
+            if (!settings.storeUrl || !settings.consumerKey || !settings.consumerSecret) { return sendResponse({ success: false, error: '商店設定不完整。' }); }
+            try {
+                const result = await checkApiPermissions(settings);
+                sendResponse({ success: true, data: result });
+            } catch (error) { sendResponse({ success: false, error: error.message }); }
+        });
+        return true;
+    }
+
     if (request.action === 'getSignedUrl') {
         chrome.storage.sync.get(['eulerstreamKey', 'tiktokUsername'], (settings) => {
-            if (chrome.runtime.lastError || !settings.tiktokUsername || !settings.eulerstreamKey) {
-                return sendResponse({ success: false, error: '金鑰或主播帳號未設定。' });
-            }
+            if (chrome.runtime.lastError || !settings.tiktokUsername || !settings.eulerstreamKey) { return sendResponse({ success: false, error: '金鑰或主播帳號未設定。' }); }
             const uniqueId = settings.tiktokUsername.replace('@', '');
             const apiKey = settings.eulerstreamKey;
             const websocketUrl = `wss://ws.eulerstream.com?uniqueId=${uniqueId}&apiKey=${apiKey}`;
@@ -35,14 +54,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true;
     }
+
     if (request.action === 'getProducts') {
         chrome.storage.sync.get(['storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId'], async (settings) => {
-            if (!settings.storeUrl || !settings.consumerKey || !settings.consumerSecret) {
-                return sendResponse({ success: false, error: '商店設定不完整。' });
-            }
-            if (!settings.defaultCategoryId) {
-                return sendResponse({ success: true, data: [] });
-            }
+            if (!settings.storeUrl || !settings.consumerKey || !settings.consumerSecret) { return sendResponse({ success: false, error: '商店設定不完整。' }); }
+            if (!settings.defaultCategoryId) { return sendResponse({ success: true, data: [] }); }
             try {
                 const apiUrl = `${settings.storeUrl}/wp-json/wc/v3/products?category=${settings.defaultCategoryId}`;
                 const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
@@ -50,55 +66,51 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const products = await response.json();
                 if (!response.ok) throw new Error('獲取商品列表失敗');
                 sendResponse({ success: true, data: products });
-            } catch (error) {
-                sendResponse({ success: false, error: error.message });
-            }
+            } catch (error) { sendResponse({ success: false, error: error.message }); }
         });
         return true;
     }
+
     if (request.action === 'createProduct') {
         chrome.storage.sync.get(['storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId'], async (settings) => {
             const productData = request.data;
+            const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
             try {
                 await checkDuplicateCallNumber(settings, productData);
+                
+                // 【v40.0 修改】 將整個圖片上傳的 if 區塊移除
+                // let imageId = null;
+                // if (productData.imageDataUrl) { ... }
+
                 const createUrl = `${settings.storeUrl}/wp-json/wc/v3/products`;
-                const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
                 const bodyPayload = {
                     name: productData.name, type: 'simple', regular_price: productData.price,
-                    description: productData.description || '',
-                    manage_stock: true, stock_quantity: productData.qty,
+                    description: productData.description || '', manage_stock: true,
+                    stock_quantity: productData.qty,
                     categories: settings.defaultCategoryId ? [{ id: parseInt(settings.defaultCategoryId, 10) }] : [],
                     meta_data: [], shipping_class: productData.shippingClassSlug || ""
                 };
-                if (productData.callNumber) {
-                    bodyPayload.meta_data.push({ key: 'call_number', value: productData.callNumber });
-                }
 
-                if (productData.supplierId) {
-                    bodyPayload.meta_data.push({ key: '_cm_supplier_id', value: productData.supplierId });
-                }
-                
-                const createResponse = await fetch(createUrl, {
-                    method: 'POST', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(bodyPayload)
-                });
+                if (productData.callNumber) bodyPayload.meta_data.push({ key: 'call_number', value: productData.callNumber });
+                if (productData.supplierId) bodyPayload.meta_data.push({ key: '_cm_supplier_id', value: productData.supplierId });
+                // if (imageId) bodyPayload.images = [{ id: imageId }]; // v40.0 移除
+
+                const createResponse = await fetch(createUrl, { method: 'POST', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }, body: JSON.stringify(bodyPayload) });
                 const newProduct = await createResponse.json();
                 if (!createResponse.ok) throw new Error(newProduct.message || '建立商品失敗');
                 sendResponse({ success: true, data: newProduct });
-            } catch (error) {
-                sendResponse({ success: false, error: error.message });
-            }
+            } catch (error) { sendResponse({ success: false, error: error.message }); }
         });
         return true;
     }
+    
+    // ... 以下程式碼保持不變 ...
     if (request.action === 'updateProduct') {
         chrome.storage.sync.get(['storeUrl', 'consumerKey', 'consumerSecret', 'defaultCategoryId'], async (settings) => {
             const { productId, data } = request;
             const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
             try {
-                if (data.callNumber !== undefined) {
-                    await checkDuplicateCallNumber(settings, data, productId);
-                }
+                if (data.callNumber !== undefined) { await checkDuplicateCallNumber(settings, data, productId); }
                 const updateUrl = `${settings.storeUrl}/wp-json/wc/v3/products/${productId}`;
                 const bodyPayload = {};
                 if (data.price !== undefined) bodyPayload.regular_price = data.price;
@@ -106,19 +118,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (data.callNumber !== undefined) bodyPayload.meta_data = [{ key: 'call_number', value: data.callNumber }];
                 if (data.status !== undefined) bodyPayload.status = data.status;
                 if (data.description !== undefined) bodyPayload.description = data.description;
-                if (Object.keys(bodyPayload).length === 0) {
-                    return sendResponse({ success: true, data: { id: productId } });
-                }
-                const updateResponse = await fetch(updateUrl, {
-                    method: 'PUT', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(bodyPayload)
-                });
+                if (Object.keys(bodyPayload).length === 0) { return sendResponse({ success: true, data: { id: productId } }); }
+                const updateResponse = await fetch(updateUrl, { method: 'PUT', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }, body: JSON.stringify(bodyPayload) });
                 const updatedProduct = await updateResponse.json();
                 if (!updateResponse.ok) throw new Error(updatedProduct.message || '更新商品失敗');
                 sendResponse({ success: true, data: updatedProduct });
-            } catch (error) {
-                sendResponse({ success: false, error: error.message });
-            }
+            } catch (error) { sendResponse({ success: false, error: error.message }); }
         });
         return true;
     }
@@ -128,115 +133,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const authHeader = 'Basic ' + btoa(`${settings.consumerKey}:${settings.consumerSecret}`);
             const batchUrl = `${settings.storeUrl}/wp-json/wc/v3/products/batch`;
             let payload = {};
-            if (operation === 'publishAll') {
-                payload.update = productIds.map(id => ({ id, status: 'publish' }));
-            } else if (operation === 'unpublishAll') {
-                payload.update = productIds.map(id => ({ id, status: 'draft' }));
-            } else if (operation === 'clearCallNumbers') {
-                payload.update = productIds.map(id => ({
-                    id,
-                    meta_data: [{ key: 'call_number', value: '' }]
-                }));
-            }
+            if (operation === 'publishAll') { payload.update = productIds.map(id => ({ id, status: 'publish' })); }
+            else if (operation === 'unpublishAll') { payload.update = productIds.map(id => ({ id, status: 'draft' })); }
+            else if (operation === 'clearCallNumbers') { payload.update = productIds.map(id => ({ id, meta_data: [{ key: 'call_number', value: '' }] })); }
             try {
-                const response = await fetch(batchUrl, {
-                    method: 'POST',
-                    headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                const response = await fetch(batchUrl, { method: 'POST', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const responseData = await response.json();
                 if (!response.ok) throw new Error(responseData.message || '批次更新失敗');
                 sendResponse({ success: true, data: responseData });
-            } catch (error) {
-                sendResponse({ success: false, error: error.message });
-            }
+            } catch (error) { sendResponse({ success: false, error: error.message }); }
         });
         return true;
     }
     if (request.action === 'addToCart') {
         chrome.storage.sync.get(['storeUrl'], async (settings) => {
-            if (!settings.storeUrl) {
-                return sendResponse({ success: false, error: '商店網址未設定。' });
-            }
-            const secretKey = '7732DDB4F15A5'; 
+            if (!settings.storeUrl) { return sendResponse({ success: false, error: '商店網址未設定。' }); }
+            const secretKey = '7732DDB4F15A5';
             const apiUrl = `${settings.storeUrl}/wp-json/livestream/v1/add-to-cart`;
             const payload = request.data;
             try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Livestream-Secret': secretKey },
-                    body: JSON.stringify(payload)
-                });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    try {
-                        const errorJson = JSON.parse(errorText);
-                        throw new Error(errorJson.message || `HTTP 錯誤: ${response.status}`);
-                    } catch (e) {
-                        throw new Error(`伺服器回傳了非 JSON 格式的錯誤 (狀態碼: ${response.status})`);
-                    }
-                }
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Livestream-Secret': secretKey }, body: JSON.stringify(payload) });
+                if (!response.ok) { const errorText = await response.text(); try { const errorJson = JSON.parse(errorText); throw new Error(errorJson.message || `HTTP 錯誤: ${response.status}`); } catch (e) { throw new Error(`伺服器回傳了非 JSON 格式的錯誤 (狀態碼: ${response.status})`); } }
                 const responseData = await response.json();
                 sendResponse({ success: true, data: responseData });
-            } catch (error) {
-                console.error('加入購物車 API 呼叫失敗:', error);
-                sendResponse({ success: false, error: error.message });
-            }
+            } catch (error) { console.error('加入購物車 API 呼叫失敗:', error); sendResponse({ success: false, error: error.message }); }
         });
         return true;
     }
 
-    // *** 【v32.0 關鍵修正】 動作：只獲取資料，不處理圖片 ***
     if (request.action === 'takeScreenshot') {
-        const { tabId, selector } = request;
-        if (!tabId || !selector) {
-            return sendResponse({ success: false, error: '請求中未提供分頁 ID 或選擇器。' });
-        }
-
-        (async () => {
-            try {
-                const tab = await chrome.tabs.get(tabId);
-                const url = tab.url;
-                if (url && (url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:'))) {
-                    throw new Error('無法在瀏覽器內部頁面上截圖。');
-                }
-
-                await chrome.scripting.insertCSS({ target: { tabId: tabId }, files: ['content_style.css'] });
-                await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ['content_script.js'] });
-
-                // 【v34.0 修改】 移除預覽指令，因為 side_panel 會負責
-
-                // 直接開始倒數
-                await chrome.tabs.sendMessage(tabId, { action: 'startCountdownOnPage' });
-                
-                await new Promise(resolve => setTimeout(resolve, 3200)); 
-                
-                const rectResponse = await chrome.tabs.sendMessage(tabId, {
-                    action: 'getElementRect',
-                    selector: selector
-                });
-                
-                if (!rectResponse || !rectResponse.success) {
-                    throw new Error(rectResponse.error || '無法從頁面獲取元素座標。');
-                }
-                
-                const fullScreenshotDataUrl = await chrome.tabs.captureVisibleTab(
-                    null, { format: 'jpeg', quality: 95 }
-                );
-
-                sendResponse({ 
-                    success: true, 
-                    data: {
-                        fullScreenshot: fullScreenshotDataUrl,
-                        rect: rectResponse.data
-                    } 
-                });
-            } catch (error) {
-                console.error("截圖流程失敗 (background):", error);
-                sendResponse({ success: false, error: error.message || '未知錯誤' });
-            }
-        })();
-        
+        // 這個 action 雖然還在，但前端已經沒有任何按鈕會呼叫它了
+        sendResponse({ success: false, error: '截圖功能已停用。' });
         return true;
     }
 });

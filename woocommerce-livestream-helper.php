@@ -170,4 +170,47 @@ function livestream_get_supplier_list_api() {
     return new WP_REST_Response( $options, 200 );
 }
 
+// 【*** 全新 v38.0 診斷工具 ***】
+// 註冊一個新的 API 路由，專門用來檢查權限
+add_action('rest_api_init', function () {
+    register_rest_route('livestream/v1', '/check-permissions', array(
+        'methods' => 'GET',
+        'callback' => 'livestream_check_api_user_permissions',
+        'permission_callback' => '__return_true' // 依賴 WC 核心驗證
+    ));
+});
+
+// 這個函式會檢查當前透過 API 登入的使用者，是否真的有 'upload_files' 權限
+function livestream_check_api_user_permissions(WP_REST_Request $request) {
+    
+    // 檢查 WooCommerce 是否能識別出 API 使用者的 ID
+    $user_id = apply_filters( 'woocommerce_rest_check_permissions', get_current_user_id(), 'read', 0, 0 );
+
+    if ( is_wp_error( $user_id ) || $user_id === 0 ) {
+        return new WP_REST_Response( array(
+            'success' => false,
+            'message' => '無法識別 API 使用者，請確認您的 API 金鑰是否正確且已啟用。',
+            'can_upload' => false,
+        ), 401 );
+    }
+
+    // 直接使用 WordPress 核心函式檢查該使用者 ID 是否有上傳權限
+    if ( user_can( $user_id, 'upload_files' ) ) {
+        // 如果有權限
+        return new WP_REST_Response( array(
+            'success' => true,
+            'message' => '權限檢查通過！此 API 金鑰對應的使用者可以上傳檔案。',
+            'can_upload' => true,
+            'user_id' => $user_id,
+        ), 200 );
+    } else {
+        // 如果 WordPress 認為它沒有權限
+        return new WP_REST_Response( array(
+            'success' => false,
+            'message' => '權限檢查失敗！WordPress 核心認為此 API 金鑰對應的使用者 (ID: ' . $user_id . ') 沒有 "upload_files" 的權限。',
+            'can_upload' => false,
+            'user_id' => $user_id,
+        ), 403 );
+    }
+}
 ?>

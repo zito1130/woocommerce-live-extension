@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { updatePreviewVisibility } = initializeScreenshotAndPreview();
     
     // 4. 初始化直播控制按鈕，直接傳入需要的函式
-    initializeLiveControls(getProductListData, renderProducts);
+    initializeLiveControls();
 
     // 5. 設定 Tab 切換邏輯 (保持不變)
     elements.tabButtons.forEach(button => {

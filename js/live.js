@@ -1,7 +1,10 @@
-// js/live.js
+// js/live.js (v41.0 - 採用使用者建議的效能優化方案)
 import { elements } from './constants.js';
 import { showToast } from './ui.js';
 import { api } from './api.js';
+// 【*** 關鍵修正 1 ***】
+// 直接從 product.js 模組導入獲取列表的函式
+import { getProductListData, renderProducts } from './product.js';
 
 let websocket = null;
 let isLive = false;
@@ -17,7 +20,9 @@ function parseOrderComment(comment) {
     };
 }
 
-function setupWebSocketListeners(productListData, renderProductsFunc) {
+// 【*** 關鍵修正 2 ***】
+// 函式不再需要接收任何參數，因為它可以直接從導入的模組獲取所需的一切
+function setupWebSocketListeners() {
     if (!websocket) return;
 
     websocket.onopen = () => {
@@ -39,11 +44,16 @@ function setupWebSocketListeners(productListData, renderProductsFunc) {
             const order = parseOrderComment(comment);
             
             if (order && uniqueId) {
-                const matchedProduct = productListData.find(p => 
+                // 【*** 關鍵修正 3 ***】
+                // 在每次收到留言時，都呼叫 getProductListData() 來獲取最新的商品列表
+                // 這是在記憶體中讀取，沒有效能問題
+                const currentProductList = getProductListData();
+
+                const matchedProduct = currentProductList.find(p => 
                     p.status === 'publish' && p.meta_data.find(m => m.key === 'call_number')?.value.toLowerCase() === order.callNumber.toLowerCase()
                 );
                 if (matchedProduct) {
-                    handleAddToCart({ nickname, uniqueId }, matchedProduct, order.quantity, productListData, renderProductsFunc);
+                    handleAddToCart({ nickname, uniqueId }, matchedProduct, order.quantity);
                     logMessage(elements.orderLogListDiv, `[ ${uniqueId} ] ${nickname}: ${comment}`);
                 }
             }
@@ -59,7 +69,7 @@ function setupWebSocketListeners(productListData, renderProductsFunc) {
     };
 }
 
-async function handleAddToCart(customerInfo, productInfo, quantity, productListData, renderProductsFunc) {
+async function handleAddToCart(customerInfo, productInfo, quantity) {
     if (productInfo.stock_quantity < quantity) {
         return showToast(`⚠️ ${customerInfo.nickname} 下單失敗，庫存不足！`, 'error');
     }
@@ -69,10 +79,14 @@ async function handleAddToCart(customerInfo, productInfo, quantity, productListD
             productId: productInfo.id,
             quantity: quantity
         });
+
+        // 直接從最新的列表中找到商品並更新庫存
+        const productListData = getProductListData();
         const productToUpdate = productListData.find(p => p.id === productInfo.id);
         if (productToUpdate) {
             productToUpdate.stock_quantity -= quantity;
-            renderProductsFunc(productListData);
+            // 直接呼叫 renderProducts 來重新渲染畫面
+            renderProducts();
         }
     } catch (error) {
         showToast(`❌ 操作失敗: ${error.message}`, 'error');
@@ -90,7 +104,7 @@ function logMessage(container, htmlContent) {
     container.scrollTop = container.scrollHeight;
 }
 
-async function startLive(productListData, renderProductsFunc) {
+async function startLive() {
     if (elements.liveTitleInput.value.length < 9) {
         return showToast('❌ 標題格式不正確 (YYMMDD-SS)', 'error');
     }
@@ -99,17 +113,16 @@ async function startLive(productListData, renderProductsFunc) {
         const { signedUrl } = await api.getSignedUrl();
         showToast('📡 驗證成功，正在連接...', 'loading');
         websocket = new WebSocket(signedUrl);
-        setupWebSocketListeners(productListData, renderProductsFunc);
+        // 【*** 關鍵修正 4 ***】
+        // 函式不再需要傳遞任何參數
+        setupWebSocketListeners();
     } catch (err) {
         showToast(`❌ 連線失敗: ${err.message}`, 'error');
     }
 }
 
-export function initializeLiveControls(getProductListData, renderProductsFunc) {
-    elements.startLiveButton.addEventListener('click', () => {
-        const productListData = getProductListData();
-        startLive(productListData, renderProductsFunc);
-    });
+export function initializeLiveControls() {
+    elements.startLiveButton.addEventListener('click', startLive);
 
     elements.pauseResumeButton.addEventListener('click', () => {
         isPaused = !isPaused;
@@ -118,8 +131,7 @@ export function initializeLiveControls(getProductListData, renderProductsFunc) {
             showToast('⏸️ 直播已暫停。', 'info');
             elements.pauseResumeButton.textContent = '恢復直播';
         } else {
-            const productListData = getProductListData();
-            startLive(productListData, renderProductsFunc);
+            startLive();
         }
     });
 
@@ -133,6 +145,5 @@ export function initializeLiveControls(getProductListData, renderProductsFunc) {
         elements.pauseResumeButton.textContent = '暫停直播';
         elements.commentListDiv.innerHTML = '';
         elements.orderLogListDiv.innerHTML = '';
-        elements.liveTitleInput.value = suggestLiveTitle();
     });
 }

@@ -47,7 +47,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getSignedUrl') {
         chrome.storage.sync.get(['eulerstreamKey', 'tiktokUsername'], (settings) => {
             if (chrome.runtime.lastError || !settings.tiktokUsername || !settings.eulerstreamKey) { return sendResponse({ success: false, error: '金鑰或主播帳號未設定。' }); }
-            const uniqueId = settings.tiktokUsername.replace('@', '');
+            const uniqueId = settings.tiktokUsername;
             const apiKey = settings.eulerstreamKey;
             const websocketUrl = `wss://ws.eulerstream.com?uniqueId=${uniqueId}&apiKey=${apiKey}`;
             sendResponse({ success: true, data: { signedUrl: websocketUrl } });

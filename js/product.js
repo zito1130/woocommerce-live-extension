@@ -10,6 +10,8 @@ let currentEditingProductId = null;
 
 export function renderProducts() {
     elements.productsListDiv.innerHTML = '';
+    // 【*** 關鍵修正 ***】
+    // 讓此函式總是使用模組內的 productListData 變數
     if (productListData.length === 0) {
         elements.productsListDiv.textContent = '此分類尚無商品。';
         return;
